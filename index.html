@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Venture Vault - BFC Store</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #4D4D4D;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .canvas-container {
+      position: relative;
+      height: 20vh;
+      background: #000000;
+      border-bottom: 3px solid #D59F0F;
+      overflow: hidden;
+    }
+
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      text-align: center;
+      padding: 6vh 0;
+    }
+
+    .venture-vault {
+      font-size: 6vw;
+      font-weight: 900;
+      color: #D59F0F;
+      text-transform: uppercase;
+      letter-spacing: 0.5vw;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 1));
+      text-shadow: 
+        3px 3px 0 #000,
+        -1px -1px 0 #000,
+        1px -1px 0 #000,
+        -1px 1px 0 #000,
+        1px 1px 0 #000,
+        0 0 20px rgba(213, 159, 15, 0.8);
+    }
+
+    .subtitle {
+      color: #ffffff;
+      font-size: 1.5vw;
+      margin-top: 1vh;
+      text-transform: uppercase;
+      letter-spacing: 0.3vw;
+      font-weight: 600;
+      text-shadow: 
+        2px 2px 0 #000,
+        -1px -1px 0 #000,
+        1px -1px 0 #000,
+        -1px 1px 0 #000,
+        0 0 10px rgba(0, 0, 0, 0.8);
+    }
+
+    .carousel-container {
+      position: relative;
+      height: calc(80vh - 10vh);
+      overflow: hidden;
+      padding: 5vh 0;
+    }
+
+    .carousel-track {
+      display: flex;
+      gap: 3vw;
+      padding: 0 3vw;
+      will-change: transform;
+    }
+
+    .product-card {
+      background: #000000;
+      border: 2px solid #D59F0F;
+      width: 30vw;
+      min-width: 30vw;
+      max-width: 30vw;
+      flex-shrink: 0;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.4s ease;
+      box-shadow: 0 0 20px rgba(213, 159, 15, 0.3);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .product-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, rgba(213, 159, 15, 0.1) 0%, transparent 50%);
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
+    }
+
+    .product-image-container {
+      position: relative;
+      background: #000000;
+      width: 100%;
+      height: 40vh;
+      min-height: 40vh;
+      max-height: 40vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      border-bottom: 2px solid #D59F0F;
+    }
+
+    .product-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.4s ease;
+      filter: brightness(0.9) contrast(1.1);
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
+    }
+
+    .product-info {
+      background: #000000;
+      padding: 2.5vh 2vw;
+      position: relative;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 15vh;
+    }
+
+    .product-info::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 2vw;
+      width: 3vw;
+      height: 3px;
+      background: #D59F0F;
+    }
+
+    .product-name {
+      font-size: 2.2vw;
+      font-weight: 800;
+      color: #ffffff;
+      text-transform: uppercase;
+      margin-bottom: 1.5vh;
+      letter-spacing: 0.2vw;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    }
+
+    .product-price {
+      font-size: 3vw;
+      font-weight: 900;
+      color: #D59F0F;
+      text-shadow: 0 0 10px rgba(213, 159, 15, 0.5);
+      letter-spacing: 0.1vw;
+    }
+
+    .footer-badge {
+      position: fixed;
+      bottom: 3vh;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #000000;
+      border: 2px solid #D59F0F;
+      padding: 1.5vh 3vw;
+      color: #D59F0F;
+      font-weight: 700;
+      font-size: 1.3vw;
+      text-transform: uppercase;
+      letter-spacing: 0.3vw;
+      z-index: 10;
+    }
+
+    .carousel-container::before,
+    .carousel-container::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      width: 10vw;
+      height: 100%;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .carousel-container::before {
+      left: 0;
+      background: linear-gradient(90deg, #4D4D4D 0%, transparent 100%);
+    }
+
+    .carousel-container::after {
+      right: 0;
+      background: linear-gradient(90deg, transparent 0%, #4D4D4D 100%);
+    }
+
+    .loading-message {
+      text-align: center;
+      color: #D59F0F;
+      font-size: 2vw;
+      padding: 10vh 0;
+      font-weight: 700;
+    }
+
+    .error-message {
+      text-align: center;
+      color: #ff4444;
+      font-size: 1.5vw;
+      padding: 10vh 2vw;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas-container">
+    <canvas id="canvas"></canvas>
+    <div class="header">
+      <div class="venture-vault">VENTURE VAULT</div>
+      <div class="subtitle">Bishop Foley Catholic High School</div>
+    </div>
+  </div>
+
+  <div class="carousel-container">
+    <div class="carousel-track" id="carouselTrack">
+      <div class="loading-message">Loading products...</div>
+    </div>
+  </div>
+
+  <div class="footer-badge">SHOW YOUR VENTURE PRIDE</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paper.js/0.12.15/paper-full.min.js"></script>
+  <script>
+    const SHEET_ID = '1DHK3Nh3dTtGXXQn6JUs7_01LAz1CdCu91FGUBxJMqAk';
+    const GID = '0';
+    const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${GID}`;
+    
+    let lastDataHash = '';
+    
+    function hashData(data) {
+      let hash = 0;
+      for (let i = 0; i < data.length; i++) {
+        const char = data.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+      }
+      return hash.toString();
+    }
+    
+    async function loadProducts() {
+      const track = document.getElementById('carouselTrack');
+      
+      try {
+        const response = await fetch(SHEET_URL);
+        const csvText = await response.text();
+        
+        const currentHash = hashData(csvText);
+        
+        if (currentHash === lastDataHash && track.children.length > 0) {
+          return;
+        }
+        
+        lastDataHash = currentHash;
+        
+        const lines = csvText.trim().split('\n');
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+        
+        const currentProducts = Array.from(track.querySelectorAll('.product-card:not(.cloned)'));
+        const newProducts = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+          
+          const nameIndex = headers.indexOf('name') >= 0 ? headers.indexOf('name') : 0;
+          const priceIndex = headers.indexOf('price') >= 0 ? headers.indexOf('price') : 1;
+          const imageIndex = headers.indexOf('image') >= 0 ? headers.indexOf('image') : 2;
+          
+          const name = values[nameIndex] || 'Product';
+          const price = values[priceIndex] || '$0';
+          const image = values[imageIndex] || 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=800&q=80';
+          
+          newProducts.push({ name, price, image });
+        }
+        
+        track.innerHTML = '';
+        
+        newProducts.forEach(product => {
+          const card = document.createElement('div');
+          card.className = 'product-card';
+          card.innerHTML = `
+            <div class="product-image-container">
+              <img class="product-image" src="${product.image}" alt="${product.name}">
+            </div>
+            <div class="product-info">
+              <div class="product-name">${product.name}</div>
+              <div class="product-price">${product.price}</div>
+            </div>
+          `;
+          track.appendChild(card);
+        });
+        
+        if (currentProducts.length === 0) {
+          startCarousel();
+        } else {
+          restartCarousel();
+        }
+        
+      } catch (error) {
+        if (track.children.length === 0) {
+          track.innerHTML = '<div class="error-message">Error loading products. Please check your Google Sheets settings.<br>Sheet ID: ' + SHEET_ID + '<br>GID: ' + GID + '</div>';
+        }
+        console.error('Error loading products:', error);
+      }
+    }
+    
+    let animationId = null;
+    
+    function startCarousel() {
+      const track = document.getElementById('carouselTrack');
+      const cards = Array.from(track.querySelectorAll('.product-card'));
+      
+      if (cards.length === 0) return;
+      
+      for (let i = 0; i < 3; i++) {
+        cards.forEach(card => {
+          const clone = card.cloneNode(true);
+          clone.classList.add('cloned');
+          track.appendChild(clone);
+        });
+      }
+      
+      let position = 0;
+      const speed = 0.5;
+      let lastTime = performance.now();
+      
+      function animateCarousel(currentTime) {
+        const deltaTime = currentTime - lastTime;
+        lastTime = currentTime;
+        
+        const normalizedSpeed = speed * (deltaTime / 10.67);
+        position -= normalizedSpeed;
+        
+        const cardWidth = cards[0].offsetWidth;
+        const gap = parseFloat(getComputedStyle(track).gap);
+        const totalWidth = (cardWidth + gap) * cards.length;
+        
+        if (Math.abs(position) >= totalWidth) {
+          position = position % totalWidth;
+        }
+        
+        track.style.transform = `translate3d(${position}px, 0, 0)`;
+        animationId = requestAnimationFrame(animateCarousel);
+      }
+      
+      animationId = requestAnimationFrame(animateCarousel);
+    }
+    
+    function restartCarousel() {
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
+      
+      const track = document.getElementById('carouselTrack');
+      const clones = track.querySelectorAll('.cloned');
+      clones.forEach(clone => clone.remove());
+      
+      startCarousel();
+    }
+    
+    loadProducts();
+    setInterval(loadProducts, 500);
+    
+    paper.install(window);
+    paper.setup(document.getElementById("canvas"));
+    
+    var canvasWidth, canvasHeight, canvasMiddleX, canvasMiddleY;
+    var shapeGroup = new Group();
+    var positionArray = [];
+
+    function getCanvasBounds() {
+      canvasWidth = view.size.width;
+      canvasHeight = view.size.height;
+      canvasMiddleX = canvasWidth / 2;
+      canvasMiddleY = canvasHeight / 2;
+      
+      var position1 = {
+        x: (canvasMiddleX / 2) + 100,
+        y: 100,
+      };
+      var position2 = {
+        x: 200,
+        y: canvasMiddleY,
+      };
+      var position3 = {
+        x: (canvasMiddleX - 50) + (canvasMiddleX / 2),
+        y: 150,
+      };
+      var position4 = {
+        x: 0,
+        y: canvasMiddleY + 100,
+      };
+      var position5 = {
+        x: canvasWidth - 130,
+        y: canvasHeight - 75,
+      };
+      var position6 = {
+        x: canvasMiddleX + 80,
+        y: canvasHeight - 50,
+      };
+      var position7 = {
+        x: canvasWidth + 60,
+        y: canvasMiddleY - 50,
+      };
+      var position8 = {
+        x: canvasMiddleX + 100,
+        y: canvasMiddleY + 100,
+      };
+      positionArray = [position3, position2, position5, position4, position1, position6, position7, position8];
+    }
+    
+    function initializeShapes() {
+      getCanvasBounds();
+      var shapePathData = [
+        'M231,352l445-156L600,0L452,54L331,3L0,48L231,352',
+        'M0,0l64,219L29,343l535,30L478,37l-133,4L0,0z',
+        'M0,65l16,138l96,107l270-2L470,0L337,4L0,65z',
+        'M333,0L0,94l64,219L29,437l570-151l-196-42L333,0',
+        'M331.9,3.6l-331,45l231,304l445-156l-76-196l-148,54L331.9,3.6z',
+        'M389,352l92-113l195-43l0,0l0,0L445,48l-80,1L122.7,0L0,275.2L162,297L389,352',
+        'M 50 100 L 300 150 L 550 50 L 750 300 L 500 250 L 300 450 L 50 100',
+        'M 700 350 L 500 350 L 700 500 L 400 400 L 200 450 L 250 350 L 100 300 L 150 50 L 350 100 L 250 150 L 450 150 L 400 50 L 550 150 L 350 250 L 650 150 L 650 50 L 700 150 L 600 250 L 750 250 L 650 300 L 700 350'
+      ];
+      
+      for (var i = 0; i < shapePathData.length; i++) {
+        var headerShape = new Path({
+          strokeColor: 'rgba(213, 159, 15, 1)',
+          strokeWidth: 5,
+          parent: shapeGroup,
+        });
+        headerShape.pathData = shapePathData[i];
+        headerShape.scale(2);
+        headerShape.position = positionArray[i];
+      }
+    }
+    initializeShapes();
+    
+    view.onFrame = function paperOnFrame(event) {
+      if (event.count % 4 === 0) {
+        for (var i = 0; i < shapeGroup.children.length; i++) {
+          if (i % 2 === 0) {
+            shapeGroup.children[i].rotate(-0.1);
+          } else {
+            shapeGroup.children[i].rotate(0.1);
+          }
+        }
+      }
+    };
+    
+    view.onResize = function paperOnResize() {
+      getCanvasBounds();
+      for (var i = 0; i < shapeGroup.children.length; i++) {
+        shapeGroup.children[i].position = positionArray[i];
+      }
+      if (canvasWidth < 700) {
+        shapeGroup.children[3].opacity = 0;
+        shapeGroup.children[2].opacity = 0;
+        shapeGroup.children[5].opacity = 0;
+      } else {
+        shapeGroup.children[3].opacity = 1;
+        shapeGroup.children[2].opacity = 1;
+        shapeGroup.children[5].opacity = 1;
+      }
+    };
+  </script>
+</body>
+</html>
