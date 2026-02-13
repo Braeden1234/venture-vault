@@ -143,7 +143,6 @@
       border: 1px solid rgba(213, 159, 15, 0.3);
       border-radius: 12px;
       overflow: hidden;
-      cursor: pointer;
       will-change: transform, opacity, filter;
       box-shadow: 
         0 20px 40px rgba(0,0,0,0.8),
@@ -154,6 +153,7 @@
       transform: translate(-50%, -50%);
       transition: all 1.5s cubic-bezier(0.45, 0.05, 0.55, 0.95);
       backface-visibility: hidden;
+      pointer-events: none;
     }
 
     .carousel-item.active {
@@ -491,8 +491,6 @@
         if (this.totalItems > 0) {
           this.updateCarousel();
           this.start();
-          this.wrapper.addEventListener('mouseenter', () => clearInterval(this.timer));
-          this.wrapper.addEventListener('mouseleave', () => this.start());
         }
       }
       
