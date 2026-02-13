@@ -14,19 +14,18 @@
 
     body {
       font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: #0b0b0b;  /* deep OLED black */
+      background: #0b0b0b;
       height: 100vh;
       width: 100vw;
       overflow: hidden;
       position: relative;
-      /* very faint grain texture */
       background-image: radial-gradient(rgba(20,20,20,0.4) 1px, transparent 1px);
       background-size: 4px 4px;
     }
 
     .canvas-container {
       position: relative;
-      height: 22vh;
+      height: 25vh;
       background: linear-gradient(180deg, #000000 0%, #0a0a0a 100%);
       border-bottom: 2px solid rgba(213, 159, 15, 0.4);
       overflow: hidden;
@@ -59,7 +58,7 @@
     }
 
     .venture-vault {
-      font-size: 6vw;
+      font-size: 6.5vw;
       font-weight: 900;
       color: #D59F0F;
       text-transform: uppercase;
@@ -74,11 +73,11 @@
 
     .subtitle {
       color: #fff;
-      font-size: 1.3vw;
+      font-size: 1.4vw;
       font-weight: 600;
       letter-spacing: 0.6vw;
       text-transform: uppercase;
-      margin-top: 1vh;
+      margin-top: 0.8vh;
       background: rgba(0,0,0,0.5);
       padding: 0.5vh 1.5vw;
       border-radius: 50px;
@@ -92,10 +91,10 @@
     .carousel-wrapper {
       position: relative;
       width: 100%;
-      height: 68vh;
+      height: 63vh;
       perspective: 1500px;
       overflow: hidden;
-      padding: 4vh 0;
+      padding: 1.5vh 0;
       background: transparent;
     }
 
@@ -138,8 +137,8 @@
 
     .carousel-item {
       position: absolute;
-      width: min(18vw, calc(68vh * 0.54));
-      height: min(22.5vw, calc(68vh * 0.675));
+      width: min(21vw, calc(63vh * 0.54));
+      height: min(26.25vw, calc(63vh * 0.675));
       background: linear-gradient(145deg, #111 0%, #0a0a0a 100%);
       border: 1px solid rgba(213, 159, 15, 0.3);
       border-radius: 12px;
@@ -157,9 +156,8 @@
       backface-visibility: hidden;
     }
 
-    /* Active card - center spotlight */
     .carousel-item.active {
-      transform: translate(-50%, -50%) translateZ(120px) scale(1.12);
+      transform: translate(-50%, -50%) translateZ(120px) scale(1.16);
       box-shadow: 
         0 30px 80px rgba(0, 0, 0, 0.9),
         0 0 60px rgba(213, 159, 15, 0.5),
@@ -174,48 +172,44 @@
       opacity: 1;
     }
 
-    /* Immediate neighbors */
     .carousel-item.left {
-      transform: translate(-50%, -50%) translateX(calc(min(18vw, calc(68vh * 0.54)) * -1.3)) translateZ(60px) rotateY(18deg) scale(0.88);
+      transform: translate(-50%, -50%) translateX(calc(min(21vw, calc(63vh * 0.54)) * -1.15)) translateZ(60px) rotateY(18deg) scale(0.92);
       opacity: 1;
       filter: brightness(0.85);
     }
 
     .carousel-item.right {
-      transform: translate(-50%, -50%) translateX(calc(min(18vw, calc(68vh * 0.54)) * 1.3)) translateZ(60px) rotateY(-18deg) scale(0.88);
+      transform: translate(-50%, -50%) translateX(calc(min(21vw, calc(63vh * 0.54)) * 1.15)) translateZ(60px) rotateY(-18deg) scale(0.92);
       opacity: 1;
       filter: brightness(0.85);
     }
 
-    /* Second tier */
     .carousel-item.far-left {
-      transform: translate(-50%, -50%) translateX(calc(min(18vw, calc(68vh * 0.54)) * -2.4)) translateZ(0px) rotateY(30deg) scale(0.75);
+      transform: translate(-50%, -50%) translateX(calc(min(21vw, calc(63vh * 0.54)) * -2.1)) translateZ(0px) rotateY(30deg) scale(0.79);
       opacity: 1;
       filter: brightness(0.7);
     }
 
     .carousel-item.far-right {
-      transform: translate(-50%, -50%) translateX(calc(min(18vw, calc(68vh * 0.54)) * 2.4)) translateZ(0px) rotateY(-30deg) scale(0.75);
+      transform: translate(-50%, -50%) translateX(calc(min(21vw, calc(63vh * 0.54)) * 2.1)) translateZ(0px) rotateY(-30deg) scale(0.79);
       opacity: 1;
       filter: brightness(0.7);
     }
 
-    /* Third tier - fade to invisible at edge position */
     .carousel-item.edge-left {
-      transform: translate(-50%, -50%) translateX(calc(min(18vw, calc(68vh * 0.54)) * -3.5)) translateZ(-50px) rotateY(40deg) scale(0.65);
+      transform: translate(-50%, -50%) translateX(calc(min(21vw, calc(63vh * 0.54)) * -3.1)) translateZ(-50px) rotateY(40deg) scale(0.68);
       opacity: 0;
       filter: brightness(0.5);
     }
 
     .carousel-item.edge-right {
-      transform: translate(-50%, -50%) translateX(calc(min(18vw, calc(68vh * 0.54)) * 3.5)) translateZ(-50px) rotateY(-40deg) scale(0.65);
+      transform: translate(-50%, -50%) translateX(calc(min(21vw, calc(63vh * 0.54)) * 3.1)) translateZ(-50px) rotateY(-40deg) scale(0.68);
       opacity: 0;
       filter: brightness(0.5);
     }
 
-    /* Completely hidden - smoothly fades to transparent with clipping */
     .carousel-item.hidden {
-      transform: translate(-50%, -50%) translateX(calc(min(18vw, calc(68vh * 0.54)) * -5)) translateZ(-200px) scale(0.3);
+      transform: translate(-50%, -50%) translateX(calc(min(21vw, calc(63vh * 0.54)) * -5)) translateZ(-200px) scale(0.3);
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
@@ -223,7 +217,7 @@
     }
 
     .carousel-item.hidden.right-hidden {
-      transform: translate(-50%, -50%) translateX(calc(min(18vw, calc(68vh * 0.54)) * 5)) translateZ(-200px) scale(0.3);
+      transform: translate(-50%, -50%) translateX(calc(min(21vw, calc(63vh * 0.54)) * 5)) translateZ(-200px) scale(0.3);
       clip-path: inset(0 0 0 100%);
     }
 
@@ -258,7 +252,7 @@
       bottom: 0;
       left: 0;
       right: 0;
-      padding: 2vh 2vw;
+      padding: 1.3vh 1.4vw;
       background: linear-gradient(180deg, transparent 0%, #0a0a0a 20%, #000 100%);
       color: white;
       z-index: 2;
@@ -273,21 +267,21 @@
       content: '';
       position: absolute;
       top: 0;
-      left: 2vw;
-      width: 3.5vw;
+      left: 1.4vw;
+      width: 2.8vw;
       height: 3px;
       background: linear-gradient(90deg, #D59F0F 0%, transparent 100%);
       box-shadow: 0 0 12px rgba(213,159,15,0.8);
     }
 
     .item-title {
-      font-size: 1.35vw;
+      font-size: 1.1vw;
       font-weight: 700;
-      margin-bottom: 0.7vh;
+      margin-bottom: 0.4vh;
       font-family: "Inter", sans-serif;
       color: #ffffff;
       text-transform: uppercase;
-      letter-spacing: 0.15vw;
+      letter-spacing: 0.1vw;
       text-shadow: 
         0 2px 8px rgba(0, 0, 0, 0.9),
         0 0 20px rgba(0, 0, 0, 0.5);
@@ -295,7 +289,7 @@
     }
 
     .item-description {
-      font-size: 2.1vw;
+      font-size: 1.75vw;
       font-weight: 900;
       line-height: 1;
       color: #D59F0F;
@@ -309,25 +303,74 @@
 
     .footer-badge {
       position: fixed;
-      bottom: 3.5vh;
+      bottom: 1.5vh;
       left: 50%;
       transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 2.5vw;
       background: linear-gradient(135deg, #0a0a0a 0%, #000 100%);
       border: 2px solid rgba(213,159,15,0.6);
-      padding: 1vh 2.5vw;
-      color: #D59F0F;
-      font-weight: 700;
-      font-size: 1.2vw;
-      text-transform: uppercase;
-      letter-spacing: 0.4vw;
-      border-radius: 50px;
+      padding: 1.5vh 4vw;
+      border-radius: 16px;
       backdrop-filter: blur(10px);
       box-shadow: 
         0 8px 32px rgba(0,0,0,0.8),
         0 0 40px rgba(213,159,15,0.2),
         inset 0 1px 0 rgba(255,255,255,0.1);
       z-index: 2000;
-      white-space: nowrap;
+      min-width: 40vw;
+    }
+
+    .footer-text {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2vh;
+    }
+
+    .footer-title {
+      color: #D59F0F;
+      font-weight: 700;
+      font-size: 1.6vw;
+      text-transform: uppercase;
+      letter-spacing: 0.3vw;
+      text-shadow: 0 0 20px rgba(213,159,15,0.4);
+    }
+
+    .footer-subtitle {
+      color: #fff;
+      font-weight: 500;
+      font-size: 1vw;
+      text-transform: uppercase;
+      letter-spacing: 0.18vw;
+      opacity: 0.9;
+    }
+
+    .qr-container {
+      position: relative;
+      width: 11vh;
+      height: 11vh;
+      background: white;
+      border-radius: 8px;
+      padding: 0;
+      box-shadow: 
+        0 0 20px rgba(213,159,15,0.4),
+        inset 0 0 0 2px rgba(213,159,15,0.3);
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .qr-code {
+      width: 100%;
+      height: 100%;
+      background: white;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .qr-code svg {
+      width: 100%;
+      height: 100%;
     }
 
     .loading-message {
@@ -366,7 +409,6 @@
       transform: translateY(-50%);
     }
 
-    /* Smooth entrance animation for new cards */
     .carousel-item.entering {
       animation: fadeInScale 0.6s ease-out forwards;
     }
@@ -401,7 +443,17 @@
     </div>
   </div>
 
-  <div class="footer-badge">SHOW YOUR VENTURE PRIDE</div>
+  <div class="footer-badge">
+    <div class="footer-text">
+      <div class="footer-title">SEE ALL OUR PRODUCTS</div>
+      <div class="footer-subtitle">Scan to Shop</div>
+    </div>
+    <div class="qr-container">
+      <div class="qr-code">
+        <img src="https://lh3.google.com/u/0/d/15iUD-jOpdKgqwHm7LXLMgjNgXyLlBUyZ=k" alt="QR Code" style="width: 100%; height: 100%; object-fit: contain;">
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paper.js/0.12.15/paper-full.min.js"></script>
   <script>
@@ -454,13 +506,11 @@
       
       updateCarousel() {
         this.items.forEach((item, index) => {
-          // Remove all state classes
           item.classList.remove('active', 'left', 'right', 'far-left', 'far-right', 'edge-left', 'edge-right', 'hidden', 'right-hidden');
           
           let rel = (index - this.currentIndex + this.totalItems) % this.totalItems;
           if (rel > this.totalItems / 2) rel -= this.totalItems;
           
-          // For 7 items: positions are -3, -2, -1, 0, 1, 2, 3
           if (rel === 0) {
             item.classList.add('active');
           } else if (rel === 1) {
@@ -529,20 +579,17 @@
         
         track.innerHTML = '';
         
-        // Ensure we have at least 7 products by cycling through if needed
         const displayProducts = [];
         if (newProducts.length === 0) {
           throw new Error('No products found');
         }
         
-        // Fill to exactly 7 items
         while (displayProducts.length < 7) {
           for (let i = 0; i < newProducts.length && displayProducts.length < 7; i++) {
             displayProducts.push(newProducts[i]);
           }
         }
         
-        // Create exactly 7 cards
         displayProducts.slice(0, 7).forEach((product, index) => {
           const card = document.createElement('div');
           card.className = 'carousel-item';
