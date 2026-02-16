@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <title>Venture Vault - Shop</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0a0a0a;
+      color: #fff;
+      position: relative;
+    }
+
+    /* Sticky Header */
+    .sticky-header {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: linear-gradient(180deg, #000000 0%, #0a0a0a 100%);
+      border-bottom: 3px solid rgba(213, 159, 15, 0.6);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.9);
+      padding: 20px 16px;
+      overflow: hidden;
+    }
+
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      opacity: 0.7;
+      z-index: 1;
+    }
+
+    .header-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      text-align: center;
+      position: relative;
+      z-index: 10;
+    }
+
+    .logo {
+      font-size: clamp(32px, 8vw, 52px);
+      font-weight: 900;
+      color: #D59F0F;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      text-shadow: 
+        0 0 30px rgba(213,159,15,0.6),
+        0 0 60px rgba(213,159,15,0.3),
+        2px 2px 0 #000;
+      line-height: 1.1;
+      margin-bottom: 8px;
+    }
+
+    .tagline {
+      font-size: clamp(11px, 2.5vw, 16px);
+      font-weight: 600;
+      color: rgba(255,255,255,0.9);
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      background: rgba(213,159,15,0.15);
+      display: inline-block;
+      padding: 6px 20px;
+      border-radius: 20px;
+      border: 1px solid rgba(213,159,15,0.4);
+    }
+
+    /* Search and Filter Bar */
+    .filter-bar {
+      position: sticky;
+      top: 102px;
+      z-index: 999;
+      background: #0f0f0f;
+      padding: 12px 16px;
+      border-bottom: 2px solid rgba(213,159,15,0.3);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.8);
+    }
+
+    .filter-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .search-box {
+      flex: 1;
+      position: relative;
+    }
+
+    .search-input {
+      width: 100%;
+      background: rgba(255,255,255,0.05);
+      border: 2px solid rgba(213,159,15,0.3);
+      border-radius: 12px;
+      padding: 14px 16px;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: rgba(213,159,15,0.8);
+      background: rgba(255,255,255,0.08);
+      box-shadow: 0 0 20px rgba(213,159,15,0.2);
+    }
+
+    .search-input::placeholder {
+      color: rgba(255,255,255,0.4);
+    }
+
+    .view-toggle {
+      display: flex;
+      background: rgba(255,255,255,0.05);
+      border: 2px solid rgba(213,159,15,0.3);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .view-btn {
+      padding: 12px 16px;
+      background: transparent;
+      border: none;
+      color: rgba(255,255,255,0.5);
+      font-size: 20px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      min-width: 50px;
+    }
+
+    .view-btn.active {
+      background: rgba(213,159,15,0.2);
+      color: #D59F0F;
+    }
+
+    /* Product Grid */
+    .products-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px 16px 40px;
+    }
+
+    .category-section {
+      margin-bottom: 40px;
+    }
+
+    .category-title {
+      font-size: clamp(20px, 5vw, 28px);
+      font-weight: 800;
+      color: #D59F0F;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid rgba(213,159,15,0.3);
+      text-shadow: 0 0 20px rgba(213,159,15,0.4);
+    }
+
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+    }
+
+    .product-grid.list-view {
+      grid-template-columns: 1fr;
+    }
+
+    .product-card {
+      background: linear-gradient(145deg, #1a1a1a 0%, #111 100%);
+      border: 2px solid rgba(213, 159, 15, 0.25);
+      border-radius: 16px;
+      overflow: hidden;
+      position: relative;
+      transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+      cursor: pointer;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .product-card:active {
+      transform: scale(0.97);
+    }
+
+    .product-card.highlighted {
+      border-color: rgba(213, 159, 15, 0.8);
+      box-shadow: 
+        0 8px 24px rgba(0,0,0,0.6),
+        0 0 30px rgba(213, 159, 15, 0.3);
+      transform: translateY(-4px);
+    }
+
+    .list-view .product-card {
+      display: flex;
+      flex-direction: row;
+      height: 140px;
+    }
+
+    .product-image-wrapper {
+      position: relative;
+      width: 100%;
+      padding-top: 125%;
+      background: #000;
+      overflow: hidden;
+      border-bottom: 2px solid rgba(213,159,15,0.2);
+    }
+
+    .list-view .product-image-wrapper {
+      width: 140px;
+      padding-top: 0;
+      flex-shrink: 0;
+      border-bottom: none;
+      border-right: 2px solid rgba(213,159,15,0.2);
+    }
+
+    .product-image {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.4s ease;
+    }
+
+    .product-card.highlighted .product-image {
+      transform: scale(1.05);
+    }
+
+    .product-info {
+      padding: 14px;
+      background: linear-gradient(180deg, #0f0f0f 0%, #000 100%);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .list-view .product-info {
+      flex: 1;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .product-name {
+      font-size: clamp(13px, 3vw, 15px);
+      font-weight: 700;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+      line-height: 1.3;
+      overflow: hidden;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      hyphens: auto;
+      min-height: 2.6em;
+      max-height: 2.6em;
+    }
+
+    .list-view .product-name {
+      font-size: clamp(15px, 3.5vw, 18px);
+      min-height: 1.3em;
+      max-height: 3.9em;
+      margin-bottom: 6px;
+    }
+
+    .product-price {
+      font-size: clamp(18px, 4.5vw, 24px);
+      font-weight: 900;
+      color: #D59F0F;
+      letter-spacing: 0.02em;
+      text-shadow: 
+        0 0 15px rgba(213,159,15,0.4),
+        1px 1px 0 #000;
+      line-height: 1;
+    }
+
+    .list-view .product-price {
+      font-size: clamp(22px, 5vw, 28px);
+    }
+
+
+
+    /* Loading & Error States */
+    .loading-state,
+    .error-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #D59F0F;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .error-state {
+      color: #ff9f9f;
+    }
+
+    /* Animations */
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .product-card {
+      animation: slideUp 0.4s ease-out backwards;
+    }
+
+    .product-card:nth-child(1) { animation-delay: 0.02s; }
+    .product-card:nth-child(2) { animation-delay: 0.04s; }
+    .product-card:nth-child(3) { animation-delay: 0.06s; }
+    .product-card:nth-child(4) { animation-delay: 0.08s; }
+    .product-card:nth-child(5) { animation-delay: 0.1s; }
+    .product-card:nth-child(6) { animation-delay: 0.12s; }
+    .product-card:nth-child(7) { animation-delay: 0.14s; }
+    .product-card:nth-child(8) { animation-delay: 0.16s; }
+    .product-card:nth-child(9) { animation-delay: 0.18s; }
+    .product-card:nth-child(10) { animation-delay: 0.2s; }
+    .product-card:nth-child(11) { animation-delay: 0.22s; }
+    .product-card:nth-child(12) { animation-delay: 0.24s; }
+
+    /* Tablet Adjustments */
+    @media (min-width: 600px) {
+      .product-grid {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 20px;
+      }
+
+      .list-view .product-card {
+        height: 160px;
+      }
+
+      .list-view .product-image-wrapper {
+        width: 160px;
+      }
+
+      .filter-bar {
+        top: 110px;
+      }
+    }
+
+    @media (min-width: 900px) {
+      .product-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 24px;
+      }
+    }
+
+    /* Hide scrollbar but keep functionality */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #0a0a0a;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(213,159,15,0.3);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(213,159,15,0.5);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sticky-header">
+    <canvas id="canvas"></canvas>
+    <div class="header-content">
+      <div class="logo">VENTURE VAULT</div>
+      <div class="tagline">Bishop Foley Catholic</div>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="filter-content">
+      <div class="search-box">
+        <input type="text" class="search-input" placeholder="Search products..." id="searchInput">
+      </div>
+      <div class="view-toggle">
+        <button class="view-btn active" id="gridViewBtn" title="Grid View">▦</button>
+        <button class="view-btn" id="listViewBtn" title="List View">☰</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="products-container" id="productsContainer">
+    <div class="loading-state">Loading products...</div>
+  </div>
+</body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paper.js/0.12.15/paper-full.min.js"></script>
+<script>
+
+
+    const SHEET_ID = '1DHK3Nh3dTtGXXQn6JUs7_01LAz1CdCu91FGUBxJMqAk';
+    const GID = '0';
+    const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${GID}`;
+    
+    let allProducts = [];
+    let currentView = 'grid';
+    
+    const searchInput = document.getElementById('searchInput');
+    const gridViewBtn = document.getElementById('gridViewBtn');
+    const listViewBtn = document.getElementById('listViewBtn');
+    const productsContainer = document.getElementById('productsContainer');
+    
+    // View Toggle
+    gridViewBtn.addEventListener('click', () => {
+      currentView = 'grid';
+      gridViewBtn.classList.add('active');
+      listViewBtn.classList.remove('active');
+      renderProducts(allProducts);
+    });
+    
+    listViewBtn.addEventListener('click', () => {
+      currentView = 'list';
+      listViewBtn.classList.add('active');
+      gridViewBtn.classList.remove('active');
+      renderProducts(allProducts);
+    });
+    
+    // Search
+    searchInput.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      const filtered = allProducts.filter(p => 
+        p.name.toLowerCase().includes(query) || 
+        p.price.toLowerCase().includes(query)
+      );
+      renderProducts(filtered);
+    });
+    
+    function renderProducts(products) {
+      if (!products || products.length === 0) {
+        productsContainer.innerHTML = '<div class="error-state">No products found</div>';
+        return;
+      }
+      
+      const viewClass = currentView === 'list' ? 'list-view' : '';
+      
+      productsContainer.innerHTML = `
+        <div class="category-section">
+          <h2 class="category-title">All Products</h2>
+          <div class="product-grid ${viewClass}" id="productGrid">
+            ${products.map((product, index) => `
+              <div class="product-card" onclick="this.classList.toggle('highlighted')">
+                <div class="product-image-wrapper">
+                  <img src="${product.image}" alt="${product.name}" class="product-image" loading="lazy">
+                </div>
+                <div class="product-info">
+                  <div class="product-name">${product.name}</div>
+                  <div class="product-price">${product.price}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+    
+    async function loadProducts() {
+      try {
+        const response = await fetch(SHEET_URL);
+        const csvText = await response.text();
+        
+        const lines = csvText.trim().split('\n');
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+        
+        const products = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+          
+          const nameIndex = headers.indexOf('name') >= 0 ? headers.indexOf('name') : 0;
+          const priceIndex = headers.indexOf('price') >= 0 ? headers.indexOf('price') : 1;
+          const imageIndex = headers.indexOf('image') >= 0 ? headers.indexOf('image') : 2;
+          
+          const name = values[nameIndex] || 'Product';
+          const price = values[priceIndex] || '$0';
+          const image = values[imageIndex] || 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=800&q=80';
+          
+          products.push({ name, price, image });
+        }
+        
+        if (products.length === 0) {
+          throw new Error('No products found');
+        }
+        
+        allProducts = products;
+        renderProducts(products);
+        
+      } catch (error) {
+        productsContainer.innerHTML = '<div class="error-state">Error loading products. Please try again.</div>';
+        console.error('Error loading products:', error);
+      }
+    }
+    
+    loadProducts();
+    setInterval(loadProducts, 15000);
+
+    // Paper.js canvas animation
+    paper.install(window);
+    paper.setup(document.getElementById("canvas"));
+    
+    var canvasWidth, canvasHeight, canvasMiddleX, canvasMiddleY;
+    var shapeGroup = new Group();
+    var positionArray = [];
+
+    function getCanvasBounds() {
+      canvasWidth = view.size.width;
+      canvasHeight = view.size.height;
+      canvasMiddleX = canvasWidth / 2;
+      canvasMiddleY = canvasHeight / 2;
+      
+      var position1 = {x: (canvasMiddleX / 2) + 50, y: canvasHeight / 2};
+      var position2 = {x: 100, y: canvasMiddleY};
+      var position3 = {x: (canvasMiddleX - 25) + (canvasMiddleX / 2), y: canvasHeight / 2};
+      var position4 = {x: 0, y: canvasMiddleY + 50};
+      var position5 = {x: canvasWidth - 65, y: canvasHeight - 35};
+      var position6 = {x: canvasMiddleX + 40, y: canvasHeight - 25};
+      var position7 = {x: canvasWidth + 30, y: canvasMiddleY - 25};
+      var position8 = {x: canvasMiddleX + 50, y: canvasMiddleY + 50};
+      
+      positionArray = [position3, position2, position5, position4, position1, position6, position7, position8];
+    }
+    
+    function initializeShapes() {
+      getCanvasBounds();
+      var shapePathData = [
+        'M231,352l445-156L600,0L452,54L331,3L0,48L231,352',
+        'M0,0l64,219L29,343l535,30L478,37l-133,4L0,0z',
+        'M0,65l16,138l96,107l270-2L470,0L337,4L0,65z',
+        'M333,0L0,94l64,219L29,437l570-151l-196-42L333,0',
+        'M331.9,3.6l-331,45l231,304l445-156l-76-196l-148,54L331.9,3.6z',
+        'M389,352l92-113l195-43l0,0l0,0L445,48l-80,1L122.7,0L0,275.2L162,297L389,352',
+        'M 50 100 L 300 150 L 550 50 L 750 300 L 500 250 L 300 450 L 50 100',
+        'M 700 350 L 500 350 L 700 500 L 400 400 L 200 450 L 250 350 L 100 300 L 150 50 L 350 100 L 250 150 L 450 150 L 400 50 L 550 150 L 350 250 L 650 150 L 650 50 L 700 150 L 600 250 L 750 250 L 650 300 L 700 350'
+      ];
+      
+      for (var i = 0; i < shapePathData.length; i++) {
+        var headerShape = new Path({
+          strokeColor: 'rgba(213, 159, 15, 0.9)',
+          strokeWidth: 3,
+          parent: shapeGroup,
+        });
+        headerShape.pathData = shapePathData[i];
+        headerShape.scale(1.2);
+        headerShape.position = positionArray[i];
+      }
+    }
+    
+    initializeShapes();
+    
+    view.onFrame = function paperOnFrame(event) {
+      if (event.count % 4 === 0) {
+        for (var i = 0; i < shapeGroup.children.length; i++) {
+          if (i % 2 === 0) {
+            shapeGroup.children[i].rotate(-0.08);
+          } else {
+            shapeGroup.children[i].rotate(0.08);
+          }
+        }
+      }
+    };
+    
+    view.onResize = function paperOnResize() {
+      getCanvasBounds();
+      for (var i = 0; i < shapeGroup.children.length; i++) {
+        shapeGroup.children[i].position = positionArray[i];
+      }
+      if (canvasWidth < 700) {
+        shapeGroup.children[3].opacity = 0;
+        shapeGroup.children[2].opacity = 0;
+        shapeGroup.children[5].opacity = 0;
+      } else {
+        shapeGroup.children[3].opacity = 1;
+        shapeGroup.children[2].opacity = 1;
+        shapeGroup.children[5].opacity = 1;
+      }
+    };
+</script>
+</html>
