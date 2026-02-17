@@ -82,18 +82,28 @@
     /* Scrolling Container */
     .scroll-container {
       position: fixed;
-      top: 100px;
+      top: var(--header-height, 100px);
       left: 0;
       right: 0;
       bottom: 0;
       overflow-y: auto;
       overflow-x: hidden;
       -webkit-overflow-scrolling: touch;
+      display: flex;
+      flex-direction: column;
     }
 
     .scroll-wrapper {
-      height: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
       min-height: 100%;
+    }
+
+    #mainContent {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
     }
 
     .products-container {
@@ -204,6 +214,131 @@
       font-weight: 600;
     }
 
+    /* ===================== */
+    /* SCHEDULE VIEW STYLES  */
+    /* ===================== */
+    .schedule-view {
+      /* Fill the full scroll area, flex column so grid can grow to fill */
+      display: flex;
+      flex-direction: column;
+      padding: 24px 20px 24px;
+      box-sizing: border-box;
+      min-height: 100%;
+    }
+
+    .schedule-header {
+      text-align: center;
+      margin-bottom: 28px;
+      flex-shrink: 0;
+    }
+
+    .schedule-header h2 {
+      font-size: clamp(28px, 5vw, 48px);
+      font-weight: 900;
+      color: #D59F0F;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      text-shadow: 0 0 30px rgba(213,159,15,0.5);
+    }
+
+    .schedule-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+      /* Grow to fill remaining height so cards stretch evenly */
+      flex: 1;
+    }
+
+    .schedule-card {
+      background: linear-gradient(135deg, #1a1a1a 0%, #0f0f0f 100%);
+      border: 2px solid rgba(213,159,15,0.35);
+      border-radius: 20px;
+      /* Use flex + min-height 0 so cards never overflow or clip */
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      padding: clamp(16px, 3vw, 36px) clamp(20px, 4vw, 48px);
+      position: relative;
+      animation: slideUp 0.5s ease-out backwards;
+      overflow: visible;
+    }
+
+    .schedule-card::before {
+      display: none;
+    }
+
+    .schedule-card:nth-child(1) { animation-delay: 0.05s; }
+    .schedule-card:nth-child(2) { animation-delay: 0.12s; }
+    .schedule-card:nth-child(3) { animation-delay: 0.19s; }
+    .schedule-card:nth-child(4) { animation-delay: 0.26s; }
+    .schedule-card:nth-child(5) { animation-delay: 0.33s; }
+    .schedule-card:nth-child(6) { animation-delay: 0.40s; }
+    .schedule-card:nth-child(7) { animation-delay: 0.47s; }
+
+    .schedule-day-icon {
+      flex-shrink: 0;
+      width: 80px;
+      height: 80px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(213,159,15,0.2), rgba(213,159,15,0.05));
+      border: 2px solid rgba(213,159,15,0.3);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+    }
+
+    .day-abbr {
+      font-size: 13px;
+      font-weight: 700;
+      color: rgba(213,159,15,0.7);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .day-icon-symbol {
+      font-size: 28px;
+    }
+
+    .schedule-info {
+      flex: 1;
+    }
+
+    .schedule-day-name {
+      font-size: clamp(22px, 4vw, 36px);
+      font-weight: 800;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+
+    .schedule-time {
+      font-size: clamp(16px, 3vw, 26px);
+      font-weight: 600;
+      color: #D59F0F;
+      letter-spacing: 0.04em;
+      text-shadow: 0 0 12px rgba(213,159,15,0.35);
+      white-space: nowrap;
+    }
+
+    /* Day icon emojis by day */
+    .icon-monday::after { content: '🗓'; }
+    .icon-tuesday::after { content: '🗓'; }
+    .icon-wednesday::after { content: '🎯'; }
+    .icon-thursday::after { content: '⚡'; }
+    .icon-friday::after { content: '🔥'; }
+    .icon-saturday::after { content: '🏆'; }
+    .icon-sunday::after { content: '🌟'; }
+    .icon-default::after { content: '📅'; }
+
     /* Animations */
     @keyframes slideUp {
       from {
@@ -247,8 +382,6 @@
     .scroll-container::-webkit-scrollbar-thumb:hover {
       background: rgba(213,159,15,0.7);
     }
-
-
   </style>
 </head>
 <body>
@@ -262,94 +395,279 @@
 
   <div class="scroll-container">
     <div class="scroll-wrapper" id="scrollWrapper">
-      <div class="products-container" id="productsContainer">
-        <div class="loading-state">Loading products...</div>
+      <div id="mainContent">
+        <div class="products-container">
+          <div class="loading-state">Loading...</div>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
     const SHEET_ID = '1DHK3Nh3dTtGXXQn6JUs7_01LAz1CdCu91FGUBxJMqAk';
-    const GID = '0';
-    const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${GID}`;
-    
-    let allProducts = [];
-    
-    const productsContainer = document.getElementById('productsContainer');
-    const scrollWrapper = document.getElementById('scrollWrapper');
-    
-    function renderProducts(products) {
-      if (!products || products.length === 0) {
-        productsContainer.innerHTML = '<div class="error-state">No products found</div>';
+
+    // Catalog products sheet (gid=0)
+    const CATALOG_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=0`;
+
+    // Schedule / display mode sheet (gid=1023584086)
+    const SCHEDULE_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=1023584086`;
+
+    const mainContent = document.getElementById('mainContent');
+
+    // ─── CSV Parser (handles quoted fields with commas) ───────────────────────
+    function parseCSVLine(line) {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          inQuotes = !inQuotes;
+        } else if (ch === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    }
+
+    // ─── Get day abbreviation for icon ───────────────────────────────────────
+    function getDayClass(dayName) {
+      const d = dayName.toLowerCase();
+      if (d.includes('mon')) return 'icon-monday';
+      if (d.includes('tue')) return 'icon-tuesday';
+      if (d.includes('wed')) return 'icon-wednesday';
+      if (d.includes('thu')) return 'icon-thursday';
+      if (d.includes('fri')) return 'icon-friday';
+      if (d.includes('sat')) return 'icon-saturday';
+      if (d.includes('sun')) return 'icon-sunday';
+      return 'icon-default';
+    }
+
+    function getDayAbbr(dayName) {
+      const d = dayName.toLowerCase();
+      if (d.includes('mon')) return 'MON';
+      if (d.includes('tue')) return 'TUE';
+      if (d.includes('wed')) return 'WED';
+      if (d.includes('thu')) return 'THU';
+      if (d.includes('fri')) return 'FRI';
+      if (d.includes('sat')) return 'SAT';
+      if (d.includes('sun')) return 'SUN';
+      return dayName.slice(0, 3).toUpperCase();
+    }
+
+    // ─── Render schedule ─────────────────────────────────────────────────────
+    function renderSchedule(entries) {
+      if (!entries || entries.length === 0) {
+        mainContent.innerHTML = `<div class="products-container"><div class="error-state">No schedule entries found.</div></div>`;
         return;
       }
-      
-      productsContainer.innerHTML = `
-        <div class="category-section">
-          <div class="product-grid">
-            ${products.map((product, index) => `
-              <div class="product-card">
-                <div class="product-image-wrapper">
-                  <img src="${product.image}" alt="${product.name}" class="product-image" loading="lazy">
-                </div>
-                <div class="product-info">
-                  <div class="product-name">${product.name}</div>
-                  <div class="product-price">${product.price}</div>
-                </div>
-              </div>
-            `).join('')}
+
+      const cards = entries.map((entry, i) => {
+        return `
+          <div class="schedule-card" style="animation-delay:${0.05 + i * 0.07}s">
+            <div class="schedule-info">
+              <div class="schedule-day-name">${entry.day}</div>
+              <div class="schedule-time">${entry.time}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      mainContent.innerHTML = `
+        <div class="schedule-view">
+          <div class="schedule-header">
+            <h2>This Week's Hours</h2>
+          </div>
+          <div class="schedule-grid">
+            ${cards}
           </div>
         </div>
       `;
     }
-    
-    async function loadProducts() {
+
+    // ─── Render catalog ──────────────────────────────────────────────────────
+    function renderProducts(products) {
+      if (!products || products.length === 0) {
+        mainContent.innerHTML = `<div class="products-container"><div class="error-state">No products found</div></div>`;
+        return;
+      }
+
+      mainContent.innerHTML = `
+        <div class="products-container">
+          <div class="category-section">
+            <div class="product-grid">
+              ${products.map((product) => `
+                <div class="product-card">
+                  <div class="product-image-wrapper">
+                    <img src="${product.image}" alt="${product.name}" class="product-image" loading="lazy">
+                  </div>
+                  <div class="product-info">
+                    <div class="product-name">${product.name}</div>
+                    <div class="product-price">${product.price}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // ─── Parse a single cell like "Wednesday 4:55 - 5:00 PM" into {day, time} ──
+    const DAY_NAMES = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+
+    function parseDayTimeCell(cell) {
+      cell = cell.trim();
+      if (!cell) return null;
+      // Find where the day name ends by matching known day names at the start
+      for (const day of DAY_NAMES) {
+        if (cell.toLowerCase().startsWith(day)) {
+          const dayDisplay = cell.slice(0, day.length);
+          const time = cell.slice(day.length).trim();
+          return { day: dayDisplay, time };
+        }
+      }
+      // Fallback: split at first digit
+      const spaceIdx = cell.search(/\s+\d/);
+      if (spaceIdx > 0) {
+        return { day: cell.slice(0, spaceIdx).trim(), time: cell.slice(spaceIdx).trim() };
+      }
+      return { day: cell, time: '' };
+    }
+
+    // ─── Load catalog products ────────────────────────────────────────────────
+    async function loadCatalog() {
       try {
-        const response = await fetch(SHEET_URL);
+        const response = await fetch(CATALOG_URL + '&cachebust=' + Date.now());
+        if (!response.ok) throw new Error('Bad response');
         const csvText = await response.text();
-        
+
         const lines = csvText.trim().split('\n');
-        const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
-        
+        const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/"/g, ''));
+
         const products = [];
-        
         for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-          
+          const values = parseCSVLine(lines[i]);
+
           const nameIndex = headers.indexOf('name') >= 0 ? headers.indexOf('name') : 0;
           const priceIndex = headers.indexOf('price') >= 0 ? headers.indexOf('price') : 1;
           const imageIndex = headers.indexOf('image') >= 0 ? headers.indexOf('image') : 2;
-          
+
           const name = values[nameIndex] || 'Product';
           const price = values[priceIndex] || '$0';
           const image = values[imageIndex] || 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=800&q=80';
-          
+
           products.push({ name, price, image });
         }
-        
-        if (products.length === 0) {
-          throw new Error('No products found');
-        }
-        
-        allProducts = products;
+
+        if (products.length === 0) throw new Error('No products');
+        // Cache for fallback
+        lastCatalogProducts = products;
         renderProducts(products);
-        
+
       } catch (error) {
-        productsContainer.innerHTML = '<div class="error-state">Error loading products. Please refresh.</div>';
-        console.error('Error loading products:', error);
+        // Use last known catalog if available
+        if (lastCatalogProducts && lastCatalogProducts.length > 0) {
+          console.warn('Catalog feed unreachable, using last known products.');
+          renderProducts(lastCatalogProducts);
+        } else {
+          mainContent.innerHTML = `<div class="products-container"><div class="error-state">Error loading products. Please refresh.</div></div>`;
+        }
+        console.error('Error loading catalog:', error);
       }
     }
-    
-    // Load products initially
-    loadProducts();
+
+    // Track last raw CSV value so we only re-render when something actually changed
+    // ─── Last-known data fallback ─────────────────────────────────────────────
+    let lastScheduleCSV = null;
+    let lastCatalogProducts = null;
+
+    // ─── Measure header height and keep scroll area below it ─────────────────
+    function updateHeaderOffset() {
+      const h = document.querySelector('.fixed-header');
+      if (h) {
+        document.documentElement.style.setProperty('--header-height', h.offsetHeight + 'px');
+      }
+    }
+    updateHeaderOffset();
+    window.addEventListener('resize', updateHeaderOffset);
+    // Re-measure after fonts load (can change height)
+    document.fonts && document.fonts.ready.then(updateHeaderOffset);
+
+    // ─── Parse and render CSV content ────────────────────────────────────────
+    function processCSV(schedCSV) {
+      const schedLines = schedCSV.trim().split('\n').filter(l => l.trim() !== '');
+
+      let rawCell = schedLines[0].trim();
+      if (rawCell.startsWith('"') && rawCell.endsWith('"')) {
+        rawCell = rawCell.slice(1, -1);
+      }
+      const firstRow = rawCell.split(',').map(s => s.trim());
+      const mode = (firstRow[0] || '').toLowerCase().trim();
+
+      if (mode === 'schedule') {
+        const entries = [];
+        for (let i = 1; i < firstRow.length; i++) {
+          const parsed = parseDayTimeCell(firstRow[i]);
+          if (parsed) entries.push(parsed);
+        }
+        if (entries.length === 0 && schedLines.length > 1) {
+          for (let i = 1; i < schedLines.length; i++) {
+            const cols = parseCSVLine(schedLines[i]);
+            if (!cols[0] || !cols[0].trim()) continue;
+            entries.push({ day: cols[0].trim(), time: (cols[1] || '').trim() });
+          }
+        }
+        renderSchedule(entries);
+      } else {
+        loadCatalog();
+      }
+    }
+
+    // ─── Poll: re-fetch every 10 seconds, use last-known data on failure ──────
+    async function poll() {
+      try {
+        const res = await fetch(SCHEDULE_URL + '&cachebust=' + Date.now());
+        if (!res.ok) throw new Error('Bad response');
+        const csv = await res.text();
+        if (csv !== lastScheduleCSV) {
+          lastScheduleCSV = csv;
+          processCSV(csv);
+        }
+      } catch (e) {
+        // Feed unreachable — keep whatever is currently displayed (last-known data)
+        console.warn('CSV feed unreachable, using last known data.');
+      }
+    }
+
+    // ─── Initial load ────────────────────────────────────────────────────────
+    async function init() {
+      try {
+        const res = await fetch(SCHEDULE_URL + '&cachebust=' + Date.now());
+        if (!res.ok) throw new Error('Bad response');
+        const csv = await res.text();
+        lastScheduleCSV = csv;
+        processCSV(csv);
+      } catch (err) {
+        console.error('Initial load failed:', err);
+        // Nothing to fall back to yet — show catalog as default
+        loadCatalog();
+      }
+    }
+
+    init();
+    setInterval(poll, 10000);
   </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paper.js/0.12.15/paper-full.min.js"></script>
   <script>
-    // Paper.js canvas animation
     paper.install(window);
     paper.setup(document.getElementById("canvas"));
-    
+
     var canvasWidth, canvasHeight, canvasMiddleX, canvasMiddleY;
     var shapeGroup = new Group();
     var positionArray = [];
@@ -359,19 +677,19 @@
       canvasHeight = view.size.height;
       canvasMiddleX = canvasWidth / 2;
       canvasMiddleY = canvasHeight / 2;
-      
-      var position1 = {x: (canvasMiddleX / 2) + 50, y: canvasHeight / 2};
-      var position2 = {x: 100, y: canvasMiddleY};
-      var position3 = {x: (canvasMiddleX - 25) + (canvasMiddleX / 2), y: canvasHeight / 2};
-      var position4 = {x: 0, y: canvasMiddleY + 50};
-      var position5 = {x: canvasWidth - 65, y: canvasHeight - 35};
-      var position6 = {x: canvasMiddleX + 40, y: canvasHeight - 25};
-      var position7 = {x: canvasWidth + 30, y: canvasMiddleY - 25};
-      var position8 = {x: canvasMiddleX + 50, y: canvasMiddleY + 50};
-      
-      positionArray = [position3, position2, position5, position4, position1, position6, position7, position8];
+
+      positionArray = [
+        {x: (canvasMiddleX - 25) + (canvasMiddleX / 2), y: canvasHeight / 2},
+        {x: 100, y: canvasMiddleY},
+        {x: canvasWidth - 65, y: canvasHeight - 35},
+        {x: 0, y: canvasMiddleY + 50},
+        {x: (canvasMiddleX / 2) + 50, y: canvasHeight / 2},
+        {x: canvasMiddleX + 40, y: canvasHeight - 25},
+        {x: canvasWidth + 30, y: canvasMiddleY - 25},
+        {x: canvasMiddleX + 50, y: canvasMiddleY + 50},
+      ];
     }
-    
+
     function initializeShapes() {
       getCanvasBounds();
       var shapePathData = [
@@ -384,7 +702,7 @@
         'M 50 100 L 300 150 L 550 50 L 750 300 L 500 250 L 300 450 L 50 100',
         'M 700 350 L 500 350 L 700 500 L 400 400 L 200 450 L 250 350 L 100 300 L 150 50 L 350 100 L 250 150 L 450 150 L 400 50 L 550 150 L 350 250 L 650 150 L 650 50 L 700 150 L 600 250 L 750 250 L 650 300 L 700 350'
       ];
-      
+
       for (var i = 0; i < shapePathData.length; i++) {
         var headerShape = new Path({
           strokeColor: 'rgba(213, 159, 15, 0.9)',
@@ -396,22 +714,18 @@
         headerShape.position = positionArray[i];
       }
     }
-    
+
     initializeShapes();
-    
-    view.onFrame = function paperOnFrame(event) {
+
+    view.onFrame = function(event) {
       if (event.count % 4 === 0) {
         for (var i = 0; i < shapeGroup.children.length; i++) {
-          if (i % 2 === 0) {
-            shapeGroup.children[i].rotate(-0.08);
-          } else {
-            shapeGroup.children[i].rotate(0.08);
-          }
+          shapeGroup.children[i].rotate(i % 2 === 0 ? -0.08 : 0.08);
         }
       }
     };
-    
-    view.onResize = function paperOnResize() {
+
+    view.onResize = function() {
       getCanvasBounds();
       for (var i = 0; i < shapeGroup.children.length; i++) {
         shapeGroup.children[i].position = positionArray[i];
