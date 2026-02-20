@@ -221,7 +221,6 @@
     /* SCHEDULE VIEW STYLES  */
     /* ===================== */
     .schedule-view {
-      /* Fill the full scroll area, flex column so grid can grow to fill */
       display: flex;
       flex-direction: column;
       padding: 24px 20px 24px;
@@ -251,7 +250,6 @@
       max-width: 900px;
       width: 100%;
       margin: 0 auto;
-      /* Grow to fill remaining height so cards stretch evenly */
       flex: 1;
     }
 
@@ -259,11 +257,9 @@
       background: linear-gradient(135deg, #1a1a1a 0%, #0f0f0f 100%);
       border: 2px solid rgba(213,159,15,0.35);
       border-radius: 20px;
-      /* Use flex + min-height 0 so cards never overflow or clip */
       flex: 1;
       min-height: 0;
-            max-height: 20vh;
-
+      max-height: 20vh;
       display: flex;
       align-items: center;
       padding: clamp(16px, 3vw, 36px) clamp(20px, 4vw, 48px);
@@ -334,15 +330,16 @@
       white-space: nowrap;
     }
 
-    /* Day icon emojis by day */
-    .icon-monday::after { content: '🗓'; }
-    .icon-tuesday::after { content: '🗓'; }
-    .icon-wednesday::after { content: '🎯'; }
-    .icon-thursday::after { content: '⚡'; }
-    .icon-friday::after { content: '🔥'; }
-    .icon-saturday::after { content: '🏆'; }
-    .icon-sunday::after { content: '🌟'; }
-    .icon-default::after { content: '📅'; }
+    /* Today highlight on schedule card */
+    .schedule-card.today {
+      border-color: rgba(213,159,15,0.9);
+      background: linear-gradient(135deg, #2a1f00 0%, #1a1200 100%);
+      box-shadow: 0 0 20px rgba(213,159,15,0.25);
+    }
+
+    .schedule-card.today .schedule-day-name {
+      color: #D59F0F;
+    }
 
     /* Animations */
     @keyframes slideUp {
@@ -387,6 +384,7 @@
     .scroll-container::-webkit-scrollbar-thumb:hover {
       background: rgba(213,159,15,0.7);
     }
+
   </style>
 </head>
 <body>
@@ -394,7 +392,7 @@
   <div class="fixed-header">
     <canvas id="canvas"></canvas>
     <div class="header-content">
-      <div class="logo">VENTURE VAULT</div>
+      <div class="logo">VENTURE<br>VAULT</div>
     </div>
   </div>
 
@@ -409,263 +407,290 @@
   </div>
 
   <script>
-    const SHEET_ID = '1DHK3Nh3dTtGXXQn6JUs7_01LAz1CdCu91FGUBxJMqAk';
-
-    // Catalog products sheet (gid=0)
+    const SHEET_ID    = '1DHK3Nh3dTtGXXQn6JUs7_01LAz1CdCu91FGUBxJMqAk';
     const CATALOG_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=0`;
-
-    // Schedule / display mode sheet (gid=1023584086)
-    const SCHEDULE_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=1023584086`;
+    const SCHEDULE_URL= `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=1023584086`;
 
     const mainContent = document.getElementById('mainContent');
 
-    // ─── CSV Parser (handles quoted fields with commas) ───────────────────────
-    function parseCSVLine(line) {
-      const result = [];
-      let current = '';
-      let inQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (ch === '"') {
-          inQuotes = !inQuotes;
-        } else if (ch === ',' && !inQuotes) {
-          result.push(current.trim());
-          current = '';
-        } else {
-          current += ch;
+    // ── State ──────────────────────────────────────────────────────────────────
+    let lastScheduleCSV     = null;
+    let lastScheduleEntries = null;
+    let lastCatalogCSV      = null;
+    let lastCatalogProducts = null;
+    let currentView         = null; // 'catalog' | 'schedule'
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    const DAY_NAMES = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+
+    function todayDayName() {
+      return ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][new Date().getDay()];
+    }
+
+    function nowMinutes() {
+      const d = new Date();
+      return d.getHours() * 60 + d.getMinutes();
+    }
+
+    // ── Parse the new flat CSV format ──────────────────────────────────────────
+    // The entire schedule lives in ONE cell:
+    //   "Thursday 2:50 - 3:30 PM,Friday 4:00 - 7:00 PM,Saturday 10:00 AM - 2:00 PM"
+    // Google Sheets wraps that single cell in outer quotes (it contains commas).
+    // Strip the outer quotes FIRST, then split on commas to get individual entries.
+    function parseScheduleCSV(csv) {
+      const entries = [];
+
+      let raw = csv.trim();
+      // Strip one layer of outer quotes that Google Sheets adds around the cell
+      if (raw.startsWith('"') && raw.endsWith('"')) {
+        raw = raw.slice(1, -1);
+      }
+
+      // Split on commas — each token is now "Thursday 2:50 - 3:30 PM" etc.
+      const tokens = raw.split(',');
+
+      for (let token of tokens) {
+        token = token.trim();
+        if (!token) continue;
+
+        const lower = token.toLowerCase();
+        const day = DAY_NAMES.find(d => lower.startsWith(d));
+        if (!day) continue;
+
+        const dayDisplay = token.slice(0, day.length);
+        const time       = token.slice(day.length).trim();
+        entries.push({ day: dayDisplay, time });
+      }
+
+      return entries;
+    }
+
+    // ── Parse a time range like "2:50 - 3:30 PM" → { openMinutes, closeMinutes }
+    function parseTimeRange(timeStr) {
+      if (!timeStr) return null;
+
+      // Normalise various dash types then split on the LAST dash to avoid
+      // catching the colon-less "3 - 5 PM" style too aggressively
+      const normalised = timeStr.replace(/–|—/g, '-').replace(/\s*-\s*/g, ' - ');
+      const parts = normalised.split(' - ');
+      if (parts.length < 2) return null;
+
+      const openStr  = parts[0].trim();
+      const closeStr = parts.slice(1).join(' - ').trim();
+
+      function toMinutes(t) {
+        t = t.trim().toUpperCase();
+        const m = t.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/);
+        if (!m) return null;
+        let h = parseInt(m[1], 10);
+        const min = parseInt(m[2] || '0', 10);
+        const ap  = m[3];
+        if (ap === 'PM' && h !== 12) h += 12;
+        if (ap === 'AM' && h === 12) h = 0;
+        return h * 60 + min;
+      }
+
+      // If openStr has no AM/PM but closeStr does, carry meridiem back
+      const meridiemMatch = closeStr.match(/(AM|PM)/i);
+      const openFull = (meridiemMatch && !/(AM|PM)/i.test(openStr))
+        ? openStr + ' ' + meridiemMatch[1]
+        : openStr;
+
+      const openMinutes  = toMinutes(openFull);
+      const closeMinutes = toMinutes(closeStr);
+      if (openMinutes === null || closeMinutes === null) return null;
+      return { openMinutes, closeMinutes };
+    }
+
+    // ── Decide what to show based purely on the clock ─────────────────────────
+    // Catalog window: 5 min before open → 5 min after close
+    function resolveView(entries) {
+      const today = todayDayName();
+      const now   = nowMinutes();
+
+      // There may be multiple entries for the same day — find the one whose
+      // window covers right now (or is closest/upcoming)
+      const todayEntries = (entries || []).filter(e =>
+        e.day.toLowerCase().startsWith(today)
+      );
+
+      if (todayEntries.length === 0) return 'schedule';
+
+      for (const entry of todayEntries) {
+        const range = parseTimeRange(entry.time);
+        if (!range) continue;
+        const { openMinutes, closeMinutes } = range;
+        if (now >= openMinutes - 5 && now < closeMinutes + 5) {
+          return 'catalog';
         }
       }
-      result.push(current.trim());
-      return result;
+
+      return 'schedule';
     }
 
-    // ─── Get day abbreviation for icon ───────────────────────────────────────
-    function getDayClass(dayName) {
-      const d = dayName.toLowerCase();
-      if (d.includes('mon')) return 'icon-monday';
-      if (d.includes('tue')) return 'icon-tuesday';
-      if (d.includes('wed')) return 'icon-wednesday';
-      if (d.includes('thu')) return 'icon-thursday';
-      if (d.includes('fri')) return 'icon-friday';
-      if (d.includes('sat')) return 'icon-saturday';
-      if (d.includes('sun')) return 'icon-sunday';
-      return 'icon-default';
-    }
-
-    function getDayAbbr(dayName) {
-      const d = dayName.toLowerCase();
-      if (d.includes('mon')) return 'MON';
-      if (d.includes('tue')) return 'TUE';
-      if (d.includes('wed')) return 'WED';
-      if (d.includes('thu')) return 'THU';
-      if (d.includes('fri')) return 'FRI';
-      if (d.includes('sat')) return 'SAT';
-      if (d.includes('sun')) return 'SUN';
-      return dayName.slice(0, 3).toUpperCase();
-    }
-
-    // ─── Render schedule ─────────────────────────────────────────────────────
+    // ── Render schedule ────────────────────────────────────────────────────────
     function renderSchedule(entries) {
       if (!entries || entries.length === 0) {
-        mainContent.innerHTML = `<div class="products-container"><div class="error-state">No schedule entries found.</div></div>`;
+        mainContent.innerHTML = `<div class="products-container"><div class="error-state">No schedule found.</div></div>`;
         return;
       }
 
+      const today = todayDayName();
       const cards = entries.map((entry, i) => {
+        const isToday = entry.day.toLowerCase().startsWith(today);
         return `
-          <div class="schedule-card" style="animation-delay:${0.05 + i * 0.07}s">
+          <div class="schedule-card${isToday ? ' today' : ''}" style="animation-delay:${0.05 + i * 0.07}s">
             <div class="schedule-info">
               <div class="schedule-day-name">${entry.day}</div>
               <div class="schedule-time">${entry.time}</div>
             </div>
-          </div>
-        `;
+          </div>`;
       }).join('');
 
       mainContent.innerHTML = `
         <div class="schedule-view">
-          <div class="schedule-header">
-            <h2>This Week's Hours</h2>
-          </div>
-          <div class="schedule-grid">
-            ${cards}
-          </div>
-        </div>
-      `;
+          <div class="schedule-header"><h2>This Week's Hours</h2></div>
+          <div class="schedule-grid">${cards}</div>
+        </div>`;
     }
 
-    // ─── Render catalog ──────────────────────────────────────────────────────
+    // ── Render catalog ─────────────────────────────────────────────────────────
     function renderProducts(products) {
       if (!products || products.length === 0) {
-        mainContent.innerHTML = `<div class="products-container"><div class="error-state">No products found</div></div>`;
+        mainContent.innerHTML = `<div class="products-container"><div class="error-state">No products found.</div></div>`;
         return;
       }
-
       mainContent.innerHTML = `
         <div class="products-container">
           <div class="category-section">
             <div class="product-grid">
-              ${products.map((product) => `
+              ${products.map(p => `
                 <div class="product-card">
                   <div class="product-image-wrapper">
-                    <img src="${product.image}" alt="${product.name}" class="product-image" loading="lazy">
+                    <img src="${p.image}" alt="${p.name}" class="product-image" loading="lazy">
                   </div>
                   <div class="product-info">
-                    <div class="product-name">${product.name}</div>
-                    <div class="product-price">${product.price}</div>
+                    <div class="product-name">${p.name}</div>
+                    <div class="product-price">${p.price}</div>
                   </div>
-                </div>
-              `).join('')}
+                </div>`).join('')}
             </div>
           </div>
-        </div>
-      `;
+        </div>`;
     }
 
-    // ─── Parse a single cell like "Wednesday 4:55 - 5:00 PM" into {day, time} ──
-    const DAY_NAMES = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-
-    function parseDayTimeCell(cell) {
-      cell = cell.trim();
-      if (!cell) return null;
-      // Find where the day name ends by matching known day names at the start
-      for (const day of DAY_NAMES) {
-        if (cell.toLowerCase().startsWith(day)) {
-          const dayDisplay = cell.slice(0, day.length);
-          const time = cell.slice(day.length).trim();
-          return { day: dayDisplay, time };
-        }
-      }
-      // Fallback: split at first digit
-      const spaceIdx = cell.search(/\s+\d/);
-      if (spaceIdx > 0) {
-        return { day: cell.slice(0, spaceIdx).trim(), time: cell.slice(spaceIdx).trim() };
-      }
-      return { day: cell, time: '' };
-    }
-
-    // ─── Load catalog products ────────────────────────────────────────────────
+    // ── Load catalog products ──────────────────────────────────────────────────
     async function loadCatalog() {
       try {
-        const response = await fetch(CATALOG_URL + '&cachebust=' + Date.now());
-        if (!response.ok) throw new Error('Bad response');
-        const csvText = await response.text();
+        const res = await fetch(CATALOG_URL + '&cachebust=' + Date.now());
+        if (!res.ok) throw new Error('bad response');
+        const csv = await res.text();
 
-        const lines = csvText.trim().split('\n');
-        const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/"/g, ''));
+        // Compare — only re-parse and re-render if something actually changed
+        if (csv === lastCatalogCSV) return;
+        lastCatalogCSV = csv;
+
+        const lines   = csv.trim().split('\n');
+        const headers = lines[0].split(',').map(h => h.replace(/"/g,'').toLowerCase().trim());
 
         const products = [];
         for (let i = 1; i < lines.length; i++) {
-          const values = parseCSVLine(lines[i]);
-
-          const nameIndex = headers.indexOf('name') >= 0 ? headers.indexOf('name') : 0;
-          const priceIndex = headers.indexOf('price') >= 0 ? headers.indexOf('price') : 1;
-          const imageIndex = headers.indexOf('image') >= 0 ? headers.indexOf('image') : 2;
-
-          const name = values[nameIndex] || 'Product';
-          const price = values[priceIndex] || '$0';
-          const image = values[imageIndex] || 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=800&q=80';
-
+          const vals  = lines[i].split(',').map(v => v.replace(/"/g,'').trim());
+          const ni    = headers.indexOf('name')  >= 0 ? headers.indexOf('name')  : 0;
+          const pi    = headers.indexOf('price') >= 0 ? headers.indexOf('price') : 1;
+          const ii    = headers.indexOf('image') >= 0 ? headers.indexOf('image') : 2;
+          const name  = vals[ni]  || 'Product';
+          const price = vals[pi]  || '$0';
+          const image = vals[ii]  || 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=800&q=80';
           products.push({ name, price, image });
         }
 
-        if (products.length === 0) throw new Error('No products');
-        // Cache for fallback
-        lastCatalogProducts = products;
-        renderProducts(products);
+        if (!products.length) throw new Error('empty');
 
-      } catch (error) {
-        // Use last known catalog if available
-        if (lastCatalogProducts && lastCatalogProducts.length > 0) {
-          console.warn('Catalog feed unreachable, using last known products.');
-          renderProducts(lastCatalogProducts);
-        } else {
-          mainContent.innerHTML = `<div class="products-container"><div class="error-state">Error loading products. Please refresh.</div></div>`;
+        // Only re-render if products actually changed
+        if (JSON.stringify(products) !== JSON.stringify(lastCatalogProducts)) {
+          lastCatalogProducts = products;
+          if (currentView === 'catalog') renderProducts(products);
         }
-        console.error('Error loading catalog:', error);
+
+      } catch (err) {
+        // Feed unreachable — keep whatever is currently displayed
       }
     }
 
-    // Track last raw CSV value so we only re-render when something actually changed
-    // ─── Last-known data fallback ─────────────────────────────────────────────
-    let lastScheduleCSV = null;
-    let lastCatalogProducts = null;
 
-    // ─── Measure header height and keep scroll area below it ─────────────────
+    // ── Apply the correct view — only re-render if something actually changed ──
+    function applyView(entries) {
+      const entriesChanged = entries !== null &&
+        JSON.stringify(entries) !== JSON.stringify(lastScheduleEntries);
+
+      if (entries !== null) lastScheduleEntries = entries;
+
+      const view = resolveView(lastScheduleEntries);
+
+      if (view === 'catalog') {
+        if (currentView !== 'catalog') {
+          // Switching to catalog — show cached products instantly if available
+          if (lastCatalogProducts && lastCatalogProducts.length) {
+            renderProducts(lastCatalogProducts);
+          }
+          currentView = 'catalog';
+        }
+        // Always fetch catalog in background — loadCatalog re-renders only if data changed
+        loadCatalog();
+      } else {
+        // Show schedule — re-render immediately if entries changed or view switched
+        if (currentView !== 'schedule' || entriesChanged) {
+          renderSchedule(lastScheduleEntries);
+          currentView = 'schedule';
+        }
+      }
+    }
+
+    // ── Measure header height ──────────────────────────────────────────────────
     function updateHeaderOffset() {
       const h = document.querySelector('.fixed-header');
-      if (h) {
-        document.documentElement.style.setProperty('--header-height', h.offsetHeight + 'px');
-      }
+      if (h) document.documentElement.style.setProperty('--header-height', h.offsetHeight + 'px');
     }
     updateHeaderOffset();
     window.addEventListener('resize', updateHeaderOffset);
-    // Re-measure after fonts load (can change height)
     document.fonts && document.fonts.ready.then(updateHeaderOffset);
 
-    // ─── Parse and render CSV content ────────────────────────────────────────
-    function processCSV(schedCSV) {
-      const schedLines = schedCSV.trim().split('\n').filter(l => l.trim() !== '');
-
-      let rawCell = schedLines[0].trim();
-      if (rawCell.startsWith('"') && rawCell.endsWith('"')) {
-        rawCell = rawCell.slice(1, -1);
-      }
-      const firstRow = rawCell.split(',').map(s => s.trim());
-      const mode = (firstRow[0] || '').toLowerCase().trim();
-
-      if (mode === 'schedule') {
-        const entries = [];
-        for (let i = 1; i < firstRow.length; i++) {
-          const parsed = parseDayTimeCell(firstRow[i]);
-          if (parsed) entries.push(parsed);
-        }
-        if (entries.length === 0 && schedLines.length > 1) {
-          for (let i = 1; i < schedLines.length; i++) {
-            const cols = parseCSVLine(schedLines[i]);
-            if (!cols[0] || !cols[0].trim()) continue;
-            entries.push({ day: cols[0].trim(), time: (cols[1] || '').trim() });
-          }
-        }
-        renderSchedule(entries);
-      } else {
-        loadCatalog();
-      }
-    }
-
-    // ─── Poll: re-fetch every 10 seconds, use last-known data on failure ──────
+    // ── Poll every 5 s: fetch → compare → update only if changed ──────────────
     async function poll() {
       try {
         const res = await fetch(SCHEDULE_URL + '&cachebust=' + Date.now());
-        if (!res.ok) throw new Error('Bad response');
+        if (!res.ok) throw new Error('bad response');
         const csv = await res.text();
-        if (csv !== lastScheduleCSV) {
-          lastScheduleCSV = csv;
-          processCSV(csv);
-        }
+
+        // Always parse fresh — applyView decides if a re-render is needed
+        const entries = parseScheduleCSV(csv);
+        const csvChanged = csv !== lastScheduleCSV;
+        lastScheduleCSV = csv;
+        applyView(csvChanged ? entries : null);
+
       } catch (e) {
-        // Feed unreachable — keep whatever is currently displayed (last-known data)
-        console.warn('CSV feed unreachable, using last known data.');
+        // Unreachable — re-check time window only, no re-render unless view changed
+        applyView(null);
       }
     }
 
-    // ─── Initial load ────────────────────────────────────────────────────────
+    // ── Initial load ───────────────────────────────────────────────────────────
     async function init() {
       try {
         const res = await fetch(SCHEDULE_URL + '&cachebust=' + Date.now());
-        if (!res.ok) throw new Error('Bad response');
+        if (!res.ok) throw new Error('bad response');
         const csv = await res.text();
         lastScheduleCSV = csv;
-        processCSV(csv);
+        const entries = parseScheduleCSV(csv);
+        applyView(entries);
       } catch (err) {
-        console.error('Initial load failed:', err);
-        // Nothing to fall back to yet — show catalog as default
         loadCatalog();
       }
     }
 
     init();
-    setInterval(poll, 10000);
+    setInterval(poll, 5000);
   </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paper.js/0.12.15/paper-full.min.js"></script>
@@ -746,5 +771,6 @@
       }
     };
   </script>
+
 </body>
 </html>
