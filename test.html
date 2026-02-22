@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loading…</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100%; height:100%; background:#000; }
+  </style>
+</head>
+<body>
+<script>
+  const DOC_ID    = '1LXh4gM2EIcpIvfVmV6F38g3dl8TpjQG_vyecAOa3Dw0';
+  const PROJECT   = 'TabletDisplay';
+  const INDEX_TAB = '0';
+  const POLL_MS   = 15000;
+
+  function hashStr(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+    return h;
+  }
+
+  async function fetchTab(tabId) {
+    const id  = String(tabId).replace(/^t\./, '');
+    const url = `https://docs.google.com/document/d/${DOC_ID}/export?format=txt&tab=t.${id}`;
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return (await res.text()).replace(/^\uFEFF/, '').trim();
+  }
+
+  function parseKV(text) {
+    const map = {};
+    for (const raw of text.split('\n')) {
+      const line = raw.trim().replace(/^[_*]+|[_*]+(?==)/g, '');
+      if (!line || line.startsWith('#') || line.startsWith('//')) continue;
+      const eq = line.indexOf('=');
+      if (eq < 1) continue;
+      const k = line.slice(0, eq).trim().replace(/^[_*]+|[_*]+$/g, '');
+      const v = line.slice(eq + 1).trim().replace(/^[_*]+|[_*]+$/g, '');
+      if (k && v) map[k] = v;
+    }
+    return map;
+  }
+
+  function buildFromContents(html, contents) {
+    let result = html;
+    for (const m of [...html.matchAll(/<link\b[^>]*\bhref=["']([^"'#][^"']*)["'][^>]*>/gi)]) {
+      if (/^https?:\/\//i.test(m[1]) || !contents[m[1]]) continue;
+      result = result.split(m[0]).join('<style>/* ' + m[1] + ' */\n' + contents[m[1]] + '\n</style>');
+    }
+    for (const m of [...result.matchAll(/<script\b([^>]*)\bsrc=["']([^"']+)["'][^>]*>\s*<\/script>/gi)]) {
+      if (/^https?:\/\//i.test(m[2]) || !contents[m[2]]) continue;
+      const t = /type=["']module["']/i.test(m[1]) ? ' type="module"' : '';
+      result = result.split(m[0]).join('<script' + t + '>/* ' + m[2] + ' */\n' + contents[m[2]] + '\n<\/script>');
+    }
+    return result;
+  }
+
+  async function fetchAllFiles(fileMap) {
+    return Promise.all(Object.keys(fileMap).map(name =>
+      fetchTab(fileMap[name])
+        .then(content => ({ name, content }))
+        .catch(() => ({ name, content: '' }))
+    ));
+  }
+
+  function applyHTML(inlinedHTML) {
+    const doc = new DOMParser().parseFromString(inlinedHTML, 'text/html');
+    document.title = doc.title || PROJECT;
+    document.head.innerHTML = '';
+    doc.head.querySelectorAll(':not(script)').forEach(n =>
+      document.head.appendChild(n.cloneNode(true))
+    );
+    document.body.innerHTML = '';
+    [...doc.body.attributes].forEach(a => document.body.setAttribute(a.name, a.value));
+    document.body.innerHTML = doc.body.innerHTML;
+    const scripts = [
+      ...doc.head.querySelectorAll('script'),
+      ...doc.body.querySelectorAll('script')
+    ];
+    function runNext(i) {
+      if (i >= scripts.length) return;
+      const orig = scripts[i], s = document.createElement('script');
+      if (orig.type) s.type = orig.type;
+      if (orig.src) {
+        s.src = orig.src;
+        s.onload  = () => runNext(i + 1);
+        s.onerror = () => runNext(i + 1);
+        document.head.appendChild(s);
+      } else {
+        s.textContent = orig.textContent;
+        document.head.appendChild(s);
+        runNext(i + 1);
+      }
+    }
+    runNext(0);
+  }
+
+  // The single source of truth for what is currently rendered.
+  // Set once at boot, never touched again — poll always diffs against this.
+  let _loadedHashes = {};
+  let _loadedFileMapKey = '';
+  let _busy = false;
+
+  function fileMapKey(fileMap) {
+    return Object.keys(fileMap).sort().join('|');
+  }
+
+  async function poll() {
+    if (_busy) return;
+    _busy = true;
+    try {
+      const projectTab = parseKV(await fetchTab(INDEX_TAB))[PROJECT];
+      if (!projectTab) return;
+
+      const freshMap = parseKV(await fetchTab(projectTab));
+
+      // File list changed → nuke & reload immediately
+      if (fileMapKey(freshMap) !== _loadedFileMapKey) {
+        console.log('[hotreload] file list changed — reloading');
+        location.reload();
+        return;
+      }
+
+      const fetched = await fetchAllFiles(freshMap);
+
+      const changed = fetched.some(f => hashStr(f.content) !== _loadedHashes[f.name]);
+
+      if (changed) {
+        console.log('[hotreload] content change detected — reloading');
+        location.reload();
+      }
+    } catch(e) {
+      console.warn('[hotreload]', e.message);
+    } finally {
+      _busy = false;
+    }
+  }
+
+  async function boot() {
+    try {
+      const projectTab = parseKV(await fetchTab(INDEX_TAB))[PROJECT];
+      if (!projectTab) throw new Error('"' + PROJECT + '" not found');
+
+      const fileMap = parseKV(await fetchTab(projectTab));
+      const htmlFilename = Object.keys(fileMap).find(n => n.toLowerCase().endsWith('.html'));
+      if (!htmlFilename) throw new Error('No .html file in "' + PROJECT + '"');
+
+      const fetched = await fetchAllFiles(fileMap);
+      const contents = {};
+      fetched.forEach(f => {
+        contents[f.name] = f.content;
+        _loadedHashes[f.name] = hashStr(f.content);  // lock in what we just rendered
+      });
+      _loadedFileMapKey = fileMapKey(fileMap);  // lock in the file list
+
+      applyHTML(buildFromContents(contents[htmlFilename], contents));
+      setInterval(poll, POLL_MS);
+
+    } catch(e) {
+      document.body.innerHTML = '<div style="color:#e07070;font-family:monospace;padding:40px;background:#0c0e12;min-height:100vh"><b>⚠ ' + e.message + '</b></div>';
+    }
+  }
+
+  boot();
+</script>
+</body>
+</html>
