@@ -61,18 +61,56 @@
     return (await res.text()).replace(/^\uFEFF/, '').trim();
   }
 
-  function parseKV(text) {
-    const map = {};
-    for (const raw of text.split('\n')) {
-      const line = raw.trim().replace(/^[_*]+|[_*]+(?==)/g, '');
-      if (!line || line.startsWith('#') || line.startsWith('//')) continue;
-      const eq = line.indexOf('=');
-      if (eq < 1) continue;
-      const k = line.slice(0, eq).trim().replace(/^[_*]+|[_*]+$/g, '');
-      const v = line.slice(eq + 1).trim().replace(/^[_*]+|[_*]+$/g, '');
-      if (k && v) map[k] = v;
+  // ── ATC_Map parser ────────────────────────────────────────────────────────────
+  // Replaces parseKV(). Handles two tab shapes:
+  //
+  // Directory tab (FileType Folder):
+  //   ATC_Map { % Files { $ FileType (Folder) { .TabletDisplay(@7xqzk0dj9lrp); } } }
+  //   → { folderMap: { TabletDisplay: '7xqzk0dj9lrp' } }
+  //
+  // Project tab (FileType HTML/SCSS/JS/CSS):
+  //   ATC_Map { % Files { $ FileType (HTML) #INDEX { .TabletDisplay(@36sh3xer9cvn); } ... } }
+  //   → { fileMap: { 'TabletDisplay.html': '36sh3xer9cvn', ... }, htmlFilename: 'TabletDisplay.html' }
+
+  function parseATCMap(text) {
+    // Normalize Google Docs formatting noise
+    const clean = text
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/[_*]/g, '')
+      .replace(/\r\n/g, '\n');
+
+    const outerMatch = clean.match(/ATC_Map\s*\{([\s\S]*)\}/);
+    if (!outerMatch) return null;
+
+    const filesMatch = outerMatch[1].match(/%\s*Files\s*\{([\s\S]*)\}/);
+    if (!filesMatch) return null;
+    const filesBlock = filesMatch[1];
+
+    // Directory tab — contains FileType (Folder)
+    if (/\(\s*Folder\s*\)/i.test(filesBlock)) {
+      const folderMap = {};
+      for (const m of filesBlock.matchAll(/\.(\w+)\(@([^)]+)\)/g)) {
+        folderMap[m[1]] = m[2];
+      }
+      return { folderMap };
     }
-    return map;
+
+    // Project tab — one or more $ FileType (EXT) [#INDEX] { ... } blocks
+    const fileMap    = {};
+    let htmlFilename = null;
+    const blockRe    = /\$\s*FileType\s*\(([^)]+)\)((?:\s*#\w+)*)\s*\{([^}]*)\}/g;
+    let bm;
+    while ((bm = blockRe.exec(filesBlock)) !== null) {
+      const ext     = bm[1].trim().toLowerCase();
+      const isIndex = bm[2].toUpperCase().includes('#INDEX');
+      for (const em of bm[3].matchAll(/\.(\w+)\(@([^)]+)\)/g)) {
+        const filename = `${em[1]}.${ext}`;
+        fileMap[filename] = em[2];
+        if (isIndex) htmlFilename = filename;
+      }
+    }
+    return { fileMap, htmlFilename };
   }
 
   // ── Parse @section directives out of a JS file ──────────────────────────────
@@ -222,7 +260,7 @@
   }
 
   // ── Apply built HTML to the page, respecting @section directives ─────────────
-  function applyHTML(inlinedHTML, filename) {
+  function applyHTML(inlinedHTML, filename, silent) {
     const doc = new DOMParser().parseFromString(inlinedHTML, 'text/html');
     document.title          = doc.title || filename || PROJECT;
     document.head.innerHTML = '';
@@ -233,16 +271,19 @@
     [...doc.body.attributes].forEach(a => document.body.setAttribute(a.name, a.value));
     document.body.innerHTML = doc.body.innerHTML;
 
-    // Re-inject overlay after body wipe so it stays on top during script execution
-    var _overlay = document.createElement('div');
-    _overlay.id = 'vv-overlay';
-    _overlay.innerHTML = '<div id="vv-spinner"></div><div id="vv-status">building…</div>';
-    _overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity 0.5s ease;';
-    var _spinner = _overlay.querySelector('#vv-spinner');
-    _spinner.style.cssText = 'width:36px;height:36px;border:3px solid rgba(213,159,15,0.2);border-top-color:#D59F0F;border-radius:50%;animation:vv-spin 0.8s linear infinite;';
-    var _statusEl = _overlay.querySelector('#vv-status');
-    _statusEl.style.cssText = 'color:rgba(213,159,15,0.7);font-family:monospace;font-size:12px;letter-spacing:.1em;';
-    document.body.appendChild(_overlay);
+    // Only show black overlay on first boot — hotreload stays invisible so old
+    // content remains visible until the new scripts finish executing.
+    if (!silent) {
+      var _overlay = document.createElement('div');
+      _overlay.id = 'vv-overlay';
+      _overlay.innerHTML = '<div id="vv-spinner"></div><div id="vv-status">building…</div>';
+      _overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity 0.5s ease;';
+      var _spinner = _overlay.querySelector('#vv-spinner');
+      _spinner.style.cssText = 'width:36px;height:36px;border:3px solid rgba(213,159,15,0.2);border-top-color:#D59F0F;border-radius:50%;animation:vv-spin 0.8s linear infinite;';
+      var _statusEl = _overlay.querySelector('#vv-status');
+      _statusEl.style.cssText = 'color:rgba(213,159,15,0.7);font-family:monospace;font-size:12px;letter-spacing:.1em;';
+      document.body.appendChild(_overlay);
+    }
 
     // Collect all scripts in DOM order
     const allScripts = [
@@ -314,10 +355,8 @@
     if (_pollUpdating) return;
     _pollUpdating = true;
     try {
-      const projectTab = parseKV(await fetchTab(INDEX_TAB))[PROJECT];
-      if (!projectTab) return;
-      const freshMap = parseKV(await fetchTab(projectTab));
-      const fetched  = await fetchAllFiles(freshMap, _contents);
+      // Use the already-known file map to fetch current file contents
+      const fetched = await fetchAllFiles(_fileMap, _contents);
 
       const freshHashes = {};
       let changed = false;
@@ -325,10 +364,6 @@
         freshHashes[f.name] = hashStr(f.content);
         if (freshHashes[f.name] !== _hashes[f.name]) changed = true;
       });
-      if (Object.keys(freshMap).sort().join('|') !== Object.keys(_fileMap).sort().join('|')) {
-        changed = true;
-        try { sessionStorage.removeItem(CACHE_KEY); } catch(e) {} // force re-resolve next boot
-      }
       if (!changed) return;
 
       console.log('[hotreload] change detected — rebuilding');
@@ -338,10 +373,9 @@
         _contents[f.name]     = f.content;
         _hashes[f.name]       = freshHashes[f.name];
       });
-      _fileMap = freshMap;
       const htmlContent = freshContents[_htmlFilename];
       if (!htmlContent) return;
-      applyHTML(buildFromContents(htmlContent, freshContents), _htmlFilename);
+      applyHTML(buildFromContents(htmlContent, freshContents), _htmlFilename, true);
     } catch(e) {
       console.warn('[hotreload]', e.message);
     } finally {
@@ -362,12 +396,21 @@
       }
     } catch(e) {}
 
-    // Cold start — walk index → project tab → file map
-    const projectTab = parseKV(await fetchTab(INDEX_TAB))[PROJECT];
-    if (!projectTab) throw new Error(`"${PROJECT}" not found`);
-    const fileMap = parseKV(await fetchTab(projectTab));
-    const htmlFilename = Object.keys(fileMap).find(n => n.toLowerCase().endsWith('.html'));
-    if (!htmlFilename) throw new Error(`No .html in "${PROJECT}"`);
+    // Cold start — Step 1: fetch directory tab → find project folder tab id
+    const dirParsed = parseATCMap(await fetchTab(INDEX_TAB));
+    if (!dirParsed || !dirParsed.folderMap)
+      throw new Error(`Could not parse Directory ATC_Map`);
+    const projectTabId = dirParsed.folderMap[PROJECT];
+    if (!projectTabId)
+      throw new Error(`"${PROJECT}" not found in Directory`);
+
+    // Step 2: fetch project tab → build file map
+    const projParsed = parseATCMap(await fetchTab(projectTabId));
+    if (!projParsed || !projParsed.fileMap)
+      throw new Error(`Could not parse project ATC_Map for "${PROJECT}"`);
+    const { fileMap, htmlFilename } = projParsed;
+    if (!htmlFilename)
+      throw new Error(`No #INDEX HTML entry found for "${PROJECT}"`);
 
     // Cache for next load
     try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ fileMap, htmlFilename })); } catch(e) {}
