@@ -4,13 +4,49 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Loading…</title>
+  <!-- Preconnect to hosts we'll definitely hit -->
+  <link rel="preconnect" href="https://docs.google.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://docs.googleusercontent.com">
+  <!-- Preload sass.js in background immediately — ready before first .scss is needed -->
+  <link rel="preload" href="https://cdn.jsdelivr.net/npm/sass.js@0.11.1/dist/sass.sync.min.js" as="script">
   <style>
-    body { margin:0; background:#000; display:flex; align-items:center; justify-content:center; height:100vh; }
-    #splash { color:#888; font-family:monospace; font-size:13px; letter-spacing:.05em; }
+    body { margin:0; background:#000; }
+    #vv-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 999999;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      transition: opacity 0.5s ease;
+    }
+    #vv-overlay.fade { opacity: 0; pointer-events: none; }
+    #vv-spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(213,159,15,0.2);
+      border-top-color: #D59F0F;
+      border-radius: 50%;
+      animation: vv-spin 0.8s linear infinite;
+    }
+    #vv-status {
+      color: rgba(213,159,15,0.7);
+      font-family: monospace;
+      font-size: 12px;
+      letter-spacing: .1em;
+    }
+    @keyframes vv-spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
-  <div id="splash">loading…</div>
+  <div id="vv-overlay">
+    <div id="vv-spinner"></div>
+    <div id="vv-status">loading…</div>
+  </div>
 <script>
   const DOC_ID    = '1LXh4gM2EIcpIvfVmV6F38g3dl8TpjQG_vyecAOa3Dw0';
   const PROJECT   = 'TabletDisplay';
@@ -84,6 +120,31 @@
     document.head.appendChild(s);
   }
 
+  // ── Overlay — stays visible until app signals content is ready ───────────────
+  function setStatus(msg) {
+    var el = document.getElementById('vv-status');
+    if (el) el.textContent = msg;
+  }
+
+  function hideOverlay() {
+    var el = document.getElementById('vv-overlay');
+    if (!el) return;
+    el.classList.add('fade');
+    setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 550);
+  }
+
+  // Poll until #mainContent has real content (not just loading state), then hide overlay
+  function waitForContent(tries) {
+    tries = tries || 0;
+    var mc = document.getElementById('mainContent');
+    if (mc && mc.children.length > 0 && !mc.querySelector('.loading-state')) {
+      hideOverlay();
+      return;
+    }
+    if (tries > 200) { hideOverlay(); return; } // 10s max
+    setTimeout(function() { waitForContent(tries + 1); }, 50);
+  }
+
   // Map of section type names to a function that returns true when ready.
   // Add new entries here to support other CDN libraries — no changes needed elsewhere.
   var SECTION_READY = {
@@ -112,8 +173,8 @@
 
   function loadSass(fn) {
     if (_sassReady) { fn(); return; }
-    _sassQueue.push(fn);
-    if (_sassQueue.length > 1) return; // already loading
+    if (fn) _sassQueue.push(fn);
+    if (_sassQueue.length > 1 || (!fn && _sassQueue.length > 0)) return; // already loading
     var s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/sass.js@0.11.1/dist/sass.sync.min.js';
     s.onload = function() {
@@ -124,6 +185,9 @@
     s.onerror = function() { console.warn('[loader] sass.js failed to load'); };
     document.head.appendChild(s);
   }
+
+  // Kick off sass.js download immediately in background — ready before first .scss hits
+  loadSass(null);
 
   function compileSass(scss, cb) {
     loadSass(function() {
@@ -169,6 +233,17 @@
     [...doc.body.attributes].forEach(a => document.body.setAttribute(a.name, a.value));
     document.body.innerHTML = doc.body.innerHTML;
 
+    // Re-inject overlay after body wipe so it stays on top during script execution
+    var _overlay = document.createElement('div');
+    _overlay.id = 'vv-overlay';
+    _overlay.innerHTML = '<div id="vv-spinner"></div><div id="vv-status">building…</div>';
+    _overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity 0.5s ease;';
+    var _spinner = _overlay.querySelector('#vv-spinner');
+    _spinner.style.cssText = 'width:36px;height:36px;border:3px solid rgba(213,159,15,0.2);border-top-color:#D59F0F;border-radius:50%;animation:vv-spin 0.8s linear infinite;';
+    var _statusEl = _overlay.querySelector('#vv-status');
+    _statusEl.style.cssText = 'color:rgba(213,159,15,0.7);font-family:monospace;font-size:12px;letter-spacing:.1em;';
+    document.body.appendChild(_overlay);
+
     // Collect all scripts in DOM order
     const allScripts = [
       ...doc.head.querySelectorAll('script'),
@@ -176,19 +251,20 @@
     ];
 
     function runNext(i) {
-      if (i >= allScripts.length) return;
+      if (i >= allScripts.length) { waitForContent(); return; }
       const orig = allScripts[i];
       const type = orig.getAttribute('type') || '';
 
       if (type === 'text/vv-scss') {
-        // Sass file — compile then inject as <style>, continue immediately (async)
+        setStatus('compiling styles…');
         const scss = orig.textContent;
         compileSass(scss, function(err, css) {
           const style = document.createElement('style');
           style.textContent = css;
           document.head.appendChild(style);
+          setStatus('loading scripts…');
+          runNext(i + 1);
         });
-        runNext(i + 1);
 
       } else if (type === 'text/vv-module') {
         const sections = parseSections(orig.textContent);
@@ -249,7 +325,10 @@
         freshHashes[f.name] = hashStr(f.content);
         if (freshHashes[f.name] !== _hashes[f.name]) changed = true;
       });
-      if (Object.keys(freshMap).sort().join('|') !== Object.keys(_fileMap).sort().join('|')) changed = true;
+      if (Object.keys(freshMap).sort().join('|') !== Object.keys(_fileMap).sort().join('|')) {
+        changed = true;
+        try { sessionStorage.removeItem(CACHE_KEY); } catch(e) {} // force re-resolve next boot
+      }
       if (!changed) return;
 
       console.log('[hotreload] change detected — rebuilding');
@@ -270,14 +349,34 @@
     }
   }
 
+  const CACHE_KEY = 'vv_filemap_' + PROJECT;
+
+  async function resolveFileMap() {
+    // Try cache first — skip 2 sequential round trips on repeat loads
+    try {
+      const cached = sessionStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const { fileMap, htmlFilename } = JSON.parse(cached);
+        console.log('[loader] using cached file map');
+        return { fileMap, htmlFilename };
+      }
+    } catch(e) {}
+
+    // Cold start — walk index → project tab → file map
+    const projectTab = parseKV(await fetchTab(INDEX_TAB))[PROJECT];
+    if (!projectTab) throw new Error(`"${PROJECT}" not found`);
+    const fileMap = parseKV(await fetchTab(projectTab));
+    const htmlFilename = Object.keys(fileMap).find(n => n.toLowerCase().endsWith('.html'));
+    if (!htmlFilename) throw new Error(`No .html in "${PROJECT}"`);
+
+    // Cache for next load
+    try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ fileMap, htmlFilename })); } catch(e) {}
+    return { fileMap, htmlFilename };
+  }
+
   async function boot() {
     try {
-      const projectTab = parseKV(await fetchTab(INDEX_TAB))[PROJECT];
-      if (!projectTab) throw new Error(`"${PROJECT}" not found`);
-
-      const fileMap = parseKV(await fetchTab(projectTab));
-      const htmlFilename = Object.keys(fileMap).find(n => n.toLowerCase().endsWith('.html'));
-      if (!htmlFilename) throw new Error(`No .html in "${PROJECT}"`);
+      const { fileMap, htmlFilename } = await resolveFileMap();
       _htmlFilename = htmlFilename;
 
       const fetched = await fetchAllFiles(fileMap, {});
@@ -289,6 +388,7 @@
       });
       _fileMap = fileMap;
 
+      setStatus('fetching styles…');
       applyHTML(buildFromContents(allContents[htmlFilename], allContents), htmlFilename);
       setInterval(pollForChanges, POLL_MS);
       console.log(`[deploy] "${PROJECT}" live — polling every ${POLL_MS/1000}s`);
