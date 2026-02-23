@@ -51,7 +51,7 @@
   const DOC_ID    = '1LXh4gM2EIcpIvfVmV6F38g3dl8TpjQG_vyecAOa3Dw0';
   const PROJECT   = 'TabletDisplay';
   const INDEX_TAB = '0';
-  const POLL_MS   = 5000;
+  const POLL_MS   = 1000;
 
   async function fetchTab(tabId) {
     const id  = String(tabId).replace(/^t\./, '');
@@ -77,34 +77,59 @@
     const clean = text
       .replace(/[\u2018\u2019]/g, "'")
       .replace(/[\u201C\u201D]/g, '"')
-      .replace(/[_*]/g, '')
+      .replace(/(?<![\w])([_*]+)|([_*]+)(?![\w])/g, '')
       .replace(/\r\n/g, '\n');
 
-    const outerMatch = clean.match(/ATC_Map\s*\{([\s\S]*)\}/);
-    if (!outerMatch) return null;
+    // Use brace-counting to extract ATC_Map { ... } — regex anchors break on
+    // trailing whitespace/newlines that Google Docs exports append.
+    function extractBraceBlock(src, fromIndex) {
+      const open = src.indexOf('{', fromIndex);
+      if (open === -1) return null;
+      let depth = 0, end = -1;
+      for (let i = open; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}') { if (--depth === 0) { end = i; break; } }
+      }
+      return end === -1 ? null : { body: src.slice(open + 1, end), open, end };
+    }
 
-    const filesMatch = outerMatch[1].match(/%\s*Files\s*\{([\s\S]*)\}/);
-    if (!filesMatch) return null;
-    const filesBlock = filesMatch[1];
+    const atcStart = clean.indexOf('ATC_Map');
+    if (atcStart === -1) return null;
+    const atcBlock = extractBraceBlock(clean, atcStart);
+    if (!atcBlock) return null;
+
+    const pctStart = atcBlock.body.indexOf('%');
+    if (pctStart === -1) return null;
+    const filesBlock = extractBraceBlock(atcBlock.body, pctStart);
+    if (!filesBlock) return null;
+    const fb = filesBlock.body;
 
     // Directory tab — contains FileType (Folder)
-    if (/\(\s*Folder\s*\)/i.test(filesBlock)) {
+    if (/\(\s*Folder\s*\)/i.test(fb)) {
       const folderMap = {};
-      for (const m of filesBlock.matchAll(/\.(\w+)\(@([^)]+)\)/g)) {
+      for (const m of fb.matchAll(/\.(\w+)\(@([^)]+)\)/g))
         folderMap[m[1]] = m[2];
-      }
       return { folderMap };
     }
 
     // Project tab — one or more $ FileType (EXT) [#INDEX] { ... } blocks
     const fileMap    = {};
     let htmlFilename = null;
-    const blockRe    = /\$\s*FileType\s*\(([^)]+)\)((?:\s*#\w+)*)\s*\{([^}]*)\}/g;
-    let bm;
-    while ((bm = blockRe.exec(filesBlock)) !== null) {
-      const ext     = bm[1].trim().toLowerCase();
-      const isIndex = bm[2].toUpperCase().includes('#INDEX');
-      for (const em of bm[3].matchAll(/\.(\w+)\(@([^)]+)\)/g)) {
+    const ftRe       = /\$\s*FileType\s*\(([^)]+)\)((?:\s*#\w+)*)\s*\{/g;
+    let fm;
+    while ((fm = ftRe.exec(fb)) !== null) {
+      const ext     = fm[1].trim().toLowerCase();
+      const isIndex = fm[2].toUpperCase().includes('#INDEX');
+      // start right after the opening brace that ftRe matched
+      const bodyStart = fm.index + fm[0].length;
+      let depth = 1, be = -1;
+      for (let i = bodyStart; i < fb.length; i++) {
+        if (fb[i] === '{') depth++;
+        else if (fb[i] === '}') { if (--depth === 0) { be = i; break; } }
+      }
+      if (be === -1) continue;
+      const body = fb.slice(bodyStart, be);
+      for (const em of body.matchAll(/\.(\w+)\(@([^)]+)\)/g)) {
         const filename = `${em[1]}.${ext}`;
         fileMap[filename] = em[2];
         if (isIndex) htmlFilename = filename;
@@ -383,28 +408,31 @@
     }
   }
 
-  const CACHE_KEY = 'vv_filemap_' + PROJECT;
+  const CACHE_KEY     = 'vv_filemap_'    + PROJECT;
+  const CACHE_KEY_CON = 'vv_contents_'   + PROJECT;
+
+  // Kick off the index tab fetch immediately — runs in parallel with everything else
+  const _prefetchDir = fetchTab(INDEX_TAB);
 
   async function resolveFileMap() {
-    // Try cache first — skip 2 sequential round trips on repeat loads
+    // ── Cache hit: return instantly, no network round trips ──────────────────
     try {
       const cached = sessionStorage.getItem(CACHE_KEY);
       if (cached) {
         const { fileMap, htmlFilename } = JSON.parse(cached);
-        console.log('[loader] using cached file map');
+        console.log('[loader] file map from cache');
         return { fileMap, htmlFilename };
       }
     } catch(e) {}
 
-    // Cold start — Step 1: fetch directory tab → find project folder tab id
-    const dirParsed = parseATCMap(await fetchTab(INDEX_TAB));
+    // ── Cold start: reuse the already-in-flight index fetch ──────────────────
+    const dirParsed = parseATCMap(await _prefetchDir);
     if (!dirParsed || !dirParsed.folderMap)
-      throw new Error(`Could not parse Directory ATC_Map`);
+      throw new Error('Could not parse Directory ATC_Map');
     const projectTabId = dirParsed.folderMap[PROJECT];
     if (!projectTabId)
       throw new Error(`"${PROJECT}" not found in Directory`);
 
-    // Step 2: fetch project tab → build file map
     const projParsed = parseATCMap(await fetchTab(projectTabId));
     if (!projParsed || !projParsed.fileMap)
       throw new Error(`Could not parse project ATC_Map for "${PROJECT}"`);
@@ -412,7 +440,6 @@
     if (!htmlFilename)
       throw new Error(`No #INDEX HTML entry found for "${PROJECT}"`);
 
-    // Cache for next load
     try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ fileMap, htmlFilename })); } catch(e) {}
     return { fileMap, htmlFilename };
   }
@@ -422,6 +449,35 @@
       const { fileMap, htmlFilename } = await resolveFileMap();
       _htmlFilename = htmlFilename;
 
+      // ── Try serving from content cache for instant first paint ─────────────
+      let servedFromCache = false;
+      try {
+        const cachedCon = sessionStorage.getItem(CACHE_KEY_CON);
+        if (cachedCon) {
+          const allContents = JSON.parse(cachedCon);
+          if (allContents[htmlFilename]) {
+            console.log('[loader] contents from cache — instant render');
+            _fileMap = fileMap;
+            Object.assign(_contents, allContents);
+            Object.keys(allContents).forEach(k => _hashes[k] = hashStr(allContents[k]));
+            applyHTML(buildFromContents(allContents[htmlFilename], allContents), htmlFilename);
+            setInterval(pollForChanges, POLL_MS);
+            servedFromCache = true;
+          }
+        }
+      } catch(e) {}
+
+      if (servedFromCache) {
+        // Fetch fresh in background to update cache for next load
+        fetchAllFiles(fileMap, {}).then(fetched => {
+          const fresh = {};
+          fetched.forEach(f => { fresh[f.name] = f.content; });
+          try { sessionStorage.setItem(CACHE_KEY_CON, JSON.stringify(fresh)); } catch(e) {}
+        });
+        return;
+      }
+
+      // ── Cold start: fetch all files in parallel ────────────────────────────
       const fetched = await fetchAllFiles(fileMap, {});
       const allContents = {};
       fetched.forEach(f => {
@@ -430,6 +486,9 @@
         _hashes[f.name]     = hashStr(f.content);
       });
       _fileMap = fileMap;
+
+      // Cache contents for next load
+      try { sessionStorage.setItem(CACHE_KEY_CON, JSON.stringify(allContents)); } catch(e) {}
 
       setStatus('fetching styles…');
       applyHTML(buildFromContents(allContents[htmlFilename], allContents), htmlFilename);
