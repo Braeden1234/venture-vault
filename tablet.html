@@ -6,11 +6,7 @@
   <title>Loading…</title>
   <link rel="preconnect" href="https://docs.google.com">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="preconnect" href="https://docs.googleusercontent.com">
   <link rel="preload" href="https://cdn.jsdelivr.net/npm/sass.js@0.11.1/dist/sass.sync.min.js" as="script">
-
-  <!-- Rise Vision Player API -->
-  <script src="https://widgets.risevision.com/stable/templates/src/rise-player-configuration.js"></script>
 
   <style>
     body { margin: 0; background: #000; }
@@ -53,24 +49,9 @@
 <script>
   // ── CONFIG ────────────────────────────────────────────────────────────────────
   const DOC_ID    = '1LXh4gM2EIcpIvfVmV6F38g3dl8TpjQG_vyecAOa3Dw0';
-  const PROJECT   = 'TabletDisplay';
+  const PROJECT   = 'MainDisplay';
   const INDEX_TAB = '0';
   const POLL_MS   = 1000;
-
-  // ── Rise Vision Integration ───────────────────────────────────────────────────
-  function riseReady() {
-    try {
-      if (window.RiseVision && typeof window.RiseVision.ready === 'function') {
-        window.RiseVision.ready();
-      }
-    } catch(e) {}
-    try { window.parent.postMessage('rise-presentation-ready', '*'); } catch(e) {}
-    try { window.postMessage('rise-presentation-ready', '*'); } catch(e) {}
-  }
-
-  window.addEventListener('rise-presentation-play',  function() { document.body.style.visibility = 'visible'; });
-  window.addEventListener('rise-presentation-stop',  function() { document.body.style.visibility = 'hidden'; });
-  window.addEventListener('rise-presentation-pause', function() { /* optional: pause animations */ });
 
   // ── Safe sessionStorage wrapper ───────────────────────────────────────────────
   const store = {
@@ -226,7 +207,6 @@
     if (!el) return;
     el.classList.add('fade');
     setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 550);
-    riseReady();
   }
 
   function waitForContent(tries) {
@@ -520,7 +500,6 @@
           <b>⚠ ${e.message}</b><br><br>
           <span style="color:#555">Check the doc is shared as "Anyone with the link — Viewer"</span>
         </div>`;
-      riseReady();
     }
   }
 
