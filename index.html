@@ -58,27 +58,21 @@
   const POLL_MS   = 1000;
 
   // ── Rise Vision Integration ───────────────────────────────────────────────────
-  // Signals Rise Vision player that content is ready to display.
-  // Safe to call even if not inside Rise Vision (postMessage is ignored outside).
   function riseReady() {
     try {
       if (window.RiseVision && typeof window.RiseVision.ready === 'function') {
         window.RiseVision.ready();
       }
     } catch(e) {}
-    // Modern Rise Vision player listens for this postMessage
     try { window.parent.postMessage('rise-presentation-ready', '*'); } catch(e) {}
     try { window.postMessage('rise-presentation-ready', '*'); } catch(e) {}
   }
 
-  // Handle play/pause/stop events from the Rise Vision player
   window.addEventListener('rise-presentation-play',  function() { document.body.style.visibility = 'visible'; });
   window.addEventListener('rise-presentation-stop',  function() { document.body.style.visibility = 'hidden'; });
   window.addEventListener('rise-presentation-pause', function() { /* optional: pause animations */ });
 
   // ── Safe sessionStorage wrapper ───────────────────────────────────────────────
-  // Rise Vision's sandboxed player may block or throw on sessionStorage.
-  // All cache reads/writes go through these helpers to avoid crashes.
   const store = {
     get: function(key) {
       try { return sessionStorage.getItem(key); } catch(e) { return null; }
@@ -88,64 +82,100 @@
     }
   };
 
-  // ── ATC_Map parser ────────────────────────────────────────────────────────────
-  function parseATCMap(text) {
+  // ── Brace-block extractor (shared utility) ────────────────────────────────────
+  function extractBraceBlock(src, fromIndex) {
+    const open = src.indexOf('{', fromIndex);
+    if (open === -1) return null;
+    let depth = 0, end = -1;
+    for (let i = open; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') { if (--depth === 0) { end = i; break; } }
+    }
+    return end === -1 ? null : { body: src.slice(open + 1, end), open, end };
+  }
+
+  // ── ATC_Map parser (new nested schema) ───────────────────────────────────────
+  //
+  // Expected structure:
+  //   ATC_Map {
+  //     % Projects {
+  //       $ Project (ProjectName) {
+  //         % Branch (BranchName) {
+  //           $ Folder (FolderName) {
+  //             % FileType (HTML) #INDEX { .Filename(@tabId); }
+  //             % FileType (CSS)         { .Filename(@tabId); }
+  //             % FileType (JS)          { .Filename(@tabId); }
+  //           }
+  //         }
+  //       }
+  //     }
+  //   }
+  //
+  // Returns { fileMap, htmlFilename } for the named project, or null on failure.
+  function parseATCMap(text, projectName) {
     const clean = text
       .replace(/[\u2018\u2019]/g, "'")
       .replace(/[\u201C\u201D]/g, '"')
       .replace(/(?<![\w])([_*]+)|([_*]+)(?![\w])/g, '')
       .replace(/\r\n/g, '\n');
 
-    function extractBraceBlock(src, fromIndex) {
-      const open = src.indexOf('{', fromIndex);
-      if (open === -1) return null;
-      let depth = 0, end = -1;
-      for (let i = open; i < src.length; i++) {
-        if (src[i] === '{') depth++;
-        else if (src[i] === '}') { if (--depth === 0) { end = i; break; } }
-      }
-      return end === -1 ? null : { body: src.slice(open + 1, end), open, end };
-    }
-
+    // 1. Find the top-level ATC_Map { … } block
     const atcStart = clean.indexOf('ATC_Map');
     if (atcStart === -1) return null;
     const atcBlock = extractBraceBlock(clean, atcStart);
     if (!atcBlock) return null;
 
-    const pctStart = atcBlock.body.indexOf('%');
-    if (pctStart === -1) return null;
-    const filesBlock = extractBraceBlock(atcBlock.body, pctStart);
-    if (!filesBlock) return null;
-    const fb = filesBlock.body;
+    // 2. Find the % Projects { … } block inside ATC_Map
+    const projsIdx = atcBlock.body.indexOf('% Projects');
+    if (projsIdx === -1) return null;
+    const projsBlock = extractBraceBlock(atcBlock.body, projsIdx);
+    if (!projsBlock) return null;
 
-    if (/\(\s*Folder\s*\)/i.test(fb)) {
-      const folderMap = {};
-      for (const m of fb.matchAll(/\.(\w+)\(@([^)]+)\)/g))
-        folderMap[m[1]] = m[2];
-      return { folderMap };
-    }
+    // 3. Find $ Project (projectName) { … }
+    const escapedName = projectName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const projRe = new RegExp('\\$\\s*Project\\s*\\(\\s*' + escapedName + '\\s*\\)');
+    const projMatch = projsBlock.body.search(projRe);
+    if (projMatch === -1) return null;
+    const projectBlock = extractBraceBlock(projsBlock.body, projMatch);
+    if (!projectBlock) return null;
 
+    // 4. Find first % Branch { … } block (branch name is ignored; first branch is used)
+    const branchIdx = projectBlock.body.indexOf('% Branch');
+    if (branchIdx === -1) return null;
+    const branchBlock = extractBraceBlock(projectBlock.body, branchIdx);
+    if (!branchBlock) return null;
+
+    // 5. Find first $ Folder { … } block (folder name is ignored; first folder is used)
+    const folderIdx = branchBlock.body.indexOf('$ Folder');
+    if (folderIdx === -1) return null;
+    const folderBlock = extractBraceBlock(branchBlock.body, folderIdx);
+    if (!folderBlock) return null;
+
+    // 6. Parse % FileType (EXT) [#INDEX] { .Name(@tabId); … } entries
     const fileMap    = {};
     let htmlFilename = null;
     const ftRe       = /\$\s*FileType\s*\(([^)]+)\)((?:\s*#\w+)*)\s*\{/g;
     let fm;
-    while ((fm = ftRe.exec(fb)) !== null) {
+    while ((fm = ftRe.exec(folderBlock.body)) !== null) {
       const ext     = fm[1].trim().toLowerCase();
       const isIndex = fm[2].toUpperCase().includes('#INDEX');
       const bodyStart = fm.index + fm[0].length;
       let depth = 1, be = -1;
-      for (let i = bodyStart; i < fb.length; i++) {
-        if (fb[i] === '{') depth++;
-        else if (fb[i] === '}') { if (--depth === 0) { be = i; break; } }
+      for (let i = bodyStart; i < folderBlock.body.length; i++) {
+        if (folderBlock.body[i] === '{') depth++;
+        else if (folderBlock.body[i] === '}') { if (--depth === 0) { be = i; break; } }
       }
       if (be === -1) continue;
-      const body = fb.slice(bodyStart, be);
+      const body = folderBlock.body.slice(bodyStart, be);
+      // Entries may have a trailing semicolon: .Name(@tabId);
       for (const em of body.matchAll(/\.(\w+)\(@([^)]+)\)/g)) {
         const filename = `${em[1]}.${ext}`;
-        fileMap[filename] = em[2];
+        fileMap[filename] = em[2].trim();
         if (isIndex) htmlFilename = filename;
       }
     }
+
+    if (!Object.keys(fileMap).length) return null;
     return { fileMap, htmlFilename };
   }
 
@@ -196,11 +226,9 @@
     if (!el) return;
     el.classList.add('fade');
     setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 550);
-    // Signal Rise Vision that we're ready to be displayed
     riseReady();
   }
 
-  // Poll until #mainContent has real content, then hide overlay
   function waitForContent(tries) {
     tries = tries || 0;
     const mc = document.getElementById('mainContent');
@@ -208,13 +236,11 @@
       hideOverlay();
       return;
     }
-    // Fallback: if there's no #mainContent element, consider content ready after
-    // all scripts have run (DOM has been populated by the loaded app).
     if (tries > 10 && !document.getElementById('mainContent')) {
       hideOverlay();
       return;
     }
-    if (tries > 200) { hideOverlay(); return; } // 10s max
+    if (tries > 200) { hideOverlay(); return; }
     setTimeout(function() { waitForContent(tries + 1); }, 50);
   }
 
@@ -410,8 +436,12 @@
   const CACHE_KEY     = 'vv_filemap_'  + PROJECT;
   const CACHE_KEY_CON = 'vv_contents_' + PROJECT;
 
+  // Pre-fetch the index tab immediately on load
   const _prefetchDir = fetchTab(INDEX_TAB);
 
+  // ── Resolve file map (single-tab, new schema) ─────────────────────────────────
+  // The index tab now contains the full ATC_Map with all projects embedded.
+  // No secondary fetch needed — just parse the index tab for our PROJECT.
   async function resolveFileMap() {
     try {
       const cached = store.get(CACHE_KEY);
@@ -422,19 +452,14 @@
       }
     } catch(e) {}
 
-    const dirParsed = parseATCMap(await _prefetchDir);
-    if (!dirParsed || !dirParsed.folderMap)
-      throw new Error('Could not parse Directory ATC_Map');
-    const projectTabId = dirParsed.folderMap[PROJECT];
-    if (!projectTabId)
-      throw new Error(`"${PROJECT}" not found in Directory`);
+    const dirText = await _prefetchDir;
+    const parsed  = parseATCMap(dirText, PROJECT);
 
-    const projParsed = parseATCMap(await fetchTab(projectTabId));
-    if (!projParsed || !projParsed.fileMap)
-      throw new Error(`Could not parse project ATC_Map for "${PROJECT}"`);
-    const { fileMap, htmlFilename } = projParsed;
+    if (!parsed || !parsed.fileMap)
+      throw new Error(`Could not parse ATC_Map for project "${PROJECT}"`);
+    const { fileMap, htmlFilename } = parsed;
     if (!htmlFilename)
-      throw new Error(`No #INDEX HTML entry found for "${PROJECT}"`);
+      throw new Error(`No #INDEX HTML entry found for project "${PROJECT}"`);
 
     store.set(CACHE_KEY, JSON.stringify({ fileMap, htmlFilename }));
     return { fileMap, htmlFilename };
@@ -495,7 +520,6 @@
           <b>⚠ ${e.message}</b><br><br>
           <span style="color:#555">Check the doc is shared as "Anyone with the link — Viewer"</span>
         </div>`;
-      // Still signal ready so Rise Vision doesn't wait forever
       riseReady();
     }
   }
