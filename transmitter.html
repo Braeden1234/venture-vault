@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Transmitter</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#111;font-family:Arial,sans-serif;color:white;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .box{max-width:480px;width:100%;background:rgba(191,144,0,0.1);border:2px solid rgba(191,144,0,0.4);border-radius:12px;padding:28px}
+    h1{color:#ffd700;margin-bottom:20px;text-align:center;font-size:1.5em}
+    .btn{display:block;width:100%;padding:14px;border:none;border-radius:8px;font-size:1em;font-weight:bold;cursor:pointer;margin-bottom:10px;color:white}
+    .btn:disabled{opacity:0.3;cursor:not-allowed}
+    .green{background:linear-gradient(135deg,#4caf50,#388e3c)}
+    .red{background:linear-gradient(135deg,#f44336,#c62828)}
+    .blue{background:linear-gradient(135deg,#2196f3,#1565c0)}
+    video{width:100%;border-radius:8px;background:#000;display:none;margin-bottom:10px;max-height:160px;object-fit:contain;border:1px solid rgba(191,144,0,0.3)}
+    #status{text-align:center;padding:12px;border-radius:8px;background:rgba(0,0,0,0.4);color:#aaa;font-size:0.88em;margin-bottom:8px}
+    #rxcount{text-align:center;padding:8px;border-radius:8px;background:rgba(33,150,243,0.1);border:1px solid rgba(33,150,243,0.25);color:#64b5f6;font-size:0.85em;margin-bottom:8px;display:none}
+    #log{text-align:center;color:rgba(255,255,255,0.18);font-family:monospace;font-size:0.7em;min-height:14px}
+  </style>
+</head>
+<body>
+<div class="box">
+  <h1>📡 Transmitter</h1>
+  <video id="preview" muted autoplay playsinline></video>
+  <button class="btn green" id="startBtn" onclick="startShare()">📺 Start Screen Share</button>
+  <button class="btn blue"  id="switchBtn" onclick="switchTab()" disabled>🔄 Switch Tab / Window</button>
+  <button class="btn red"   id="stopBtn"  onclick="stopShare()" disabled>⏹ Stop</button>
+  <div id="status">Ready</div>
+  <div id="rxcount"></div>
+  <div id="log"></div>
+</div>
+<script>
+// ── HARDCODED ────────────────────────────────────────────────────────────────
+const FORM  = "https://docs.google.com/forms/u/0/d/e/1FAIpQLScjcxNzt7-UPVnMoByGLaFhZoAQuM7XBEZmNJgcP0K72sltEw/formResponse";
+const SHEET = "https://docs.google.com/spreadsheets/d/1FaeVsI8nxNeXdzkMuMtN4alFas6pCerFjA7L9hvbaOM/gviz/tq?tqx=out:csv&gid=0";
+const F_SES  = "entry.1210189098";
+const F_TYPE = "entry.2124791945";
+const F_DATA = "entry.1906917004";
+const STUN = {iceServers:[
+  {urls:"stun:stun.l.google.com:19302"},
+  {urls:"stun:stun1.l.google.com:19302"},
+  {urls:"stun:stun2.l.google.com:19302"},
+  {urls:"stun:stun3.l.google.com:19302"}
+]};
+// ────────────────────────────────────────────────────────────────────────────
+
+// Each receiver gets its own PC entry: { rxid, pc, offerSent, answerApplied }
+let stream   = null;
+let peers    = {};   // rxid → { pc, offerSent, answerApplied }
+let pollLoop = null;
+
+// ── Start ────────────────────────────────────────────────────────────────────
+async function startShare() {
+  stream = await pickScreen();
+  if(!stream) return;
+
+  document.getElementById('startBtn').disabled  = true;
+  document.getElementById('switchBtn').disabled = false;
+  document.getElementById('stopBtn').disabled   = false;
+  document.getElementById('rxcount').style.display = 'block';
+
+  pollLoop = setInterval(poll, 2000);
+  poll();
+}
+
+// ── Switch tab/window ────────────────────────────────────────────────────────
+async function switchTab() {
+  const newStream = await pickScreen();
+  if(!newStream) return;
+
+  const newTrack = newStream.getVideoTracks()[0];
+
+  // Replace track in every active peer connection
+  for(const rxid in peers) {
+    const pc = peers[rxid].pc;
+    const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+    if(sender) {
+      sender.replaceTrack(newTrack).catch(e => log('replaceTrack: '+e.message));
+    }
+  }
+
+  // Swap out stream
+  if(stream) stream.getTracks().forEach(t => t.stop());
+  stream = newStream;
+  document.getElementById('preview').srcObject = stream;
+  stream.getVideoTracks()[0].onended = stopShare;
+  st('🔄 Switched source — stream updated');
+}
+
+// ── Stop ─────────────────────────────────────────────────────────────────────
+function stopShare() {
+  clearInterval(pollLoop);
+  Object.values(peers).forEach(p => p.pc.close());
+  peers = {};
+  if(stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  const prev = document.getElementById('preview');
+  prev.srcObject = null; prev.style.display = 'none';
+  document.getElementById('startBtn').disabled  = false;
+  document.getElementById('switchBtn').disabled = true;
+  document.getElementById('stopBtn').disabled   = true;
+  document.getElementById('rxcount').style.display = 'none';
+  st('Stopped'); log('');
+}
+
+// ── Pick screen ───────────────────────────────────────────────────────────────
+async function pickScreen() {
+  try {
+    const s = await navigator.mediaDevices.getDisplayMedia({video:{cursor:'always'},audio:false});
+    const prev = document.getElementById('preview');
+    prev.srcObject = s;
+    prev.style.display = 'block';
+    s.getVideoTracks()[0].onended = stopShare;
+    return s;
+  } catch(e) { st('❌ '+e.message); return null; }
+}
+
+// ── Main poll: check for new receivers + new answers ─────────────────────────
+async function poll() {
+  if(!stream) return;
+  try {
+    const rows = await getSheet();
+
+    // 1. Find all receiver join requests (type === 'join', session starts with 'RX_')
+    const requests = new Set();
+    for(const r of rows) {
+      if(r.length >= 2 && r[0].startsWith('RX_') && r[1] === 'join') {
+        requests.add(r[0]); // e.g. "RX_abc123"
+      }
+    }
+
+    // 2. For each new receiver, create a PC and post an offer
+    for(const rxid of requests) {
+      if(peers[rxid]) continue; // already know this one
+      log('new receiver: '+rxid);
+      peers[rxid] = { pc: null, offerSent: false, answerApplied: false };
+      await createOfferFor(rxid);
+    }
+
+    // 3. For each receiver waiting for answer, check if answer arrived
+    for(const rxid in peers) {
+      const p = peers[rxid];
+      if(!p.offerSent || p.answerApplied) continue;
+      if(p.pc.remoteDescription) { p.answerApplied = true; continue; }
+
+      // Look for answer row: session = RX_rxid_ANS
+      const ansKey = rxid + '_ANS';
+      for(let i = rows.length-1; i >= 0; i--) {
+        const r = rows[i];
+        if(r.length >= 3 && r[0] === ansKey && r[1] === 'answer') {
+          try {
+            await p.pc.setRemoteDescription(new RTCSessionDescription(dec(r[2])));
+            p.answerApplied = true;
+            log('answer applied: '+rxid);
+          } catch(e) { log('ans err '+rxid+': '+e.message); }
+          break;
+        }
+      }
+    }
+
+    // Clean up dead connections
+    for(const rxid in peers) {
+      const state = peers[rxid].pc?.connectionState;
+      if(['failed','closed'].includes(state)) {
+        peers[rxid].pc.close();
+        delete peers[rxid];
+      }
+    }
+
+    // Update receiver count
+    const alive = Object.values(peers).filter(p => p.pc?.connectionState === 'connected').length;
+    const total = Object.keys(peers).length;
+    document.getElementById('rxcount').textContent =
+      `📺 ${alive} receiver${alive!==1?'s':''} connected (${total} negotiating)`;
+
+  } catch(e) { log('poll: '+e.message); }
+}
+
+async function createOfferFor(rxid) {
+  const pc = new RTCPeerConnection(STUN);
+  peers[rxid].pc = pc;
+
+  // Add all current stream tracks
+  stream.getTracks().forEach(t => pc.addTrack(t, stream));
+
+  pc.onconnectionstatechange = () => {
+    log(rxid+': '+pc.connectionState);
+    if(pc.connectionState === 'connected') st('🟢 '+rxid+' connected');
+    if(['disconnected','failed'].includes(pc.connectionState)) {
+      // Remove so receiver can rejoin
+      delete peers[rxid];
+    }
+  };
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await waitICE(pc);
+
+  // Post offer: session = RX_rxid_OFFER
+  await post(rxid+'_OFFER', 'offer', enc(pc.localDescription));
+  peers[rxid].offerSent = true;
+  log('offer sent to '+rxid);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function waitICE(pc) {
+  return new Promise(r => {
+    if(pc.iceGatheringState==='complete'){r();return;}
+    pc.onicegatheringstatechange = () => { if(pc.iceGatheringState==='complete') r(); };
+    setTimeout(r, 10000);
+  });
+}
+async function post(s,t,d) {
+  const fd=new FormData();
+  fd.append(F_SES,s); fd.append(F_TYPE,t); fd.append(F_DATA,d);
+  await fetch(FORM,{method:'POST',body:fd,mode:'no-cors'});
+  await sleep(500);
+}
+async function getSheet() {
+  const r=await fetch(SHEET+'&t='+Date.now(),{cache:'no-store'});
+  return csv(await r.text());
+}
+function csv(t) {
+  const rows=[];
+  for(const line of t.trim().split('\n')) {
+    if(!line.trim()) continue;
+    const f=[];let c='',q=false;
+    for(let i=0;i<line.length;i++){
+      const ch=line[i];
+      if(ch==='"'){if(q&&line[i+1]==='"'){c+='"';i++;}else q=!q;}
+      else if(ch===','&&!q){f.push(c.trim());c='';}
+      else c+=ch;
+    }
+    f.push(c.trim());rows.push(f);
+  }
+  return rows;
+}
+function enc(sdp){return btoa(unescape(encodeURIComponent(JSON.stringify(sdp))));}
+function dec(s){return JSON.parse(decodeURIComponent(escape(atob(s))));}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function st(m){document.getElementById('status').textContent=m;}
+function log(m){document.getElementById('log').textContent=m;}
+</script>
+</body>
+</html>
